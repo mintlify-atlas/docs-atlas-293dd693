@@ -22,7 +22,7 @@ Set the `type` variable to `"spark"` (default) or `"hive"` to select the applica
 | `name` | Name of the serverless application | `""` |
 | `type` | Application type: `"spark"` or `"hive"` | `"spark"` |
 | `release_label` | Explicit EMR release version (e.g. `"emr-7.0.0"`) | `null` |
-| `release_label_prefix` | Prefix used to auto-select the latest matching release | Latest emr-7.x |
+| `release_label_filters` | Map of filters to auto-select the latest matching release label | `{ default = { prefix = "emr-7" } }` |
 | `initial_capacity` | Pre-initialized worker capacity per worker type | `null` |
 | `maximum_capacity` | Cumulative resource ceiling across all running workers | `null` |
 | `network_configuration` | VPC subnet IDs and security group IDs for private connectivity | `null` |
@@ -56,7 +56,11 @@ module "emr_serverless" {
 
   name = "example-spark"
 
-  release_label_prefix = "emr-7"
+  release_label_filters = {
+    default = {
+      prefix = "emr-7"
+    }
+  }
 
   initial_capacity = {
     driver = {
@@ -97,7 +101,7 @@ module "emr_serverless" {
   security_group_egress_rules = {
     all = {
       ip_protocol = "-1"
-      cidr_ipv4 = "0.0.0.0/0"
+      cidr_ipv4   = "0.0.0.0/0"
     }
   }
 
@@ -117,8 +121,12 @@ module "emr_serverless" {
 
   name = "example-hive"
 
-  release_label_prefix = "emr-7"
-  type                 = "hive"
+  release_label_filters = {
+    default = {
+      prefix = "emr-7"
+    }
+  }
+  type = "hive"
 
   initial_capacity = {
     driver = {
