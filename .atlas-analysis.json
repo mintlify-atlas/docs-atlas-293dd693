@@ -1,0 +1,105 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "AWS EMR Terraform Module",
+  "projectDescription": "A Terraform module that creates and manages AWS EMR resources including EC2-based clusters, serverless applications, virtual clusters on EKS, and EMR Studios.",
+  "theme": "aspen",
+  "primaryColor": "#594ed8",
+  "lightColor": "#acacf4",
+  "darkColor": "#040404",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Cluster Types",
+            "pages": [
+              "clusters/ec2-cluster",
+              "clusters/serverless",
+              "clusters/virtual-cluster",
+              "clusters/studio"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/instance-fleets",
+              "configuration/instance-groups",
+              "configuration/iam-roles",
+              "configuration/security-groups",
+              "configuration/scaling"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/private-cluster",
+              "examples/public-cluster",
+              "examples/serverless-cluster",
+              "examples/virtual-cluster-eks",
+              "examples/studio"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Root Module",
+            "pages": [
+              "reference/inputs",
+              "reference/outputs"
+            ]
+          },
+          {
+            "group": "Submodules",
+            "pages": [
+              "reference/serverless-inputs",
+              "reference/virtual-cluster-inputs",
+              "reference/studio-inputs"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "EMR clusters using instance fleets or instance groups in public or private subnets",
+    "EMR Serverless applications for Spark and Hive workloads",
+    "EMR Virtual Clusters running on Amazon EKS",
+    "EMR Studios with IAM or SSO authentication",
+    "Managed security groups for master, core, and task nodes",
+    "IAM roles for autoscaling, EMR service, and EC2 instance profiles",
+    "Managed scaling policies for automatic cluster resizing",
+    "Support for EMR managed IAM policies v2"
+  ],
+  "publicApiSurface": [
+    "module \"emr\" { source = \"terraform-aws-modules/emr/aws\" }",
+    "module \"emr_serverless\" { source = \"terraform-aws-modules/emr/aws//modules/serverless\" }",
+    "module \"emr_virtual_cluster\" { source = \"terraform-aws-modules/emr/aws//modules/virtual-cluster\" }",
+    "module \"emr_studio\" { source = \"terraform-aws-modules/emr/aws//modules/studio\" }",
+    "var.create - Controls if resources should be created",
+    "var.master_instance_fleet - Instance Fleet configuration for master node",
+    "var.core_instance_fleet - Instance Fleet configuration for core node",
+    "var.task_instance_fleet - Instance Fleet configuration for task node",
+    "var.master_instance_group - Instance Group configuration for master node",
+    "var.core_instance_group - Instance Group configuration for core node",
+    "var.task_instance_group - Instance Group configuration for task node",
+    "var.managed_scaling_policy - Managed Scaling Policy configuration",
+    "var.create_managed_security_groups - Toggle managed security group creation",
+    "var.create_service_iam_role - Toggle service IAM role creation",
+    "var.create_iam_instance_profile - Toggle EC2 IAM instance profile creation",
+    "output.cluster_arn - The ARN of the cluster",
+    "output.cluster_id - The ID of the cluster",
+    "output.service_iam_role_arn - Service IAM role ARN",
+    "output.managed_master_security_group_id - ID of the managed master security group"
+  ]
+}
