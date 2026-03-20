@@ -1,0 +1,163 @@
+---
+title: 'Serverless submodule'
+description: 'Input and output reference for the EMR Serverless submodule.'
+sidebarTitle: 'Serverless'
+---
+
+## Inputs
+
+### General
+
+<ParamField path="create" type="bool" default="true">
+  Controls if resources should be created (affects nearly all resources).
+</ParamField>
+
+<ParamField path="region" type="string" default="null">
+  Region where the resource(s) will be managed. Defaults to the Region set in the provider configuration.
+</ParamField>
+
+<ParamField path="tags" type="map(string)" default="{}">
+  A map of tags to add to all resources.
+</ParamField>
+
+### Application
+
+<ParamField path="name" type="string" default='""'>
+  The name of the application.
+</ParamField>
+
+<ParamField path="type" type="string" default='"spark"'>
+  The type of application you want to start, such as `spark` or `hive`.
+</ParamField>
+
+<ParamField path="release_label" type="string" default="null">
+  Release label for the Amazon EMR release.
+</ParamField>
+
+<ParamField path="release_label_filters" type="map(object)" default='{ default = { prefix = "emr-7" } }'>
+  Map of release label filters used to look up a release label. Each entry accepts `application` (optional string) and `prefix` (optional string).
+</ParamField>
+
+<ParamField path="architecture" type="string" default="null">
+  The CPU architecture of an application. Valid values are `ARM64` or `X86_64`. Default value is `X86_64`.
+</ParamField>
+
+<ParamField path="auto_start_configuration" type="object" default="null">
+  The configuration for an application to automatically start on job submission. Accepts:
+  - `enabled` (optional bool)
+</ParamField>
+
+<ParamField path="auto_stop_configuration" type="object" default="null">
+  The configuration for an application to automatically stop after a certain amount of time being idle. Accepts:
+  - `enabled` (optional bool)
+  - `idle_timeout_minutes` (optional number)
+</ParamField>
+
+<ParamField path="image_configuration" type="object" default="null">
+  The image configuration applied to all worker types. Accepts:
+  - `image_uri` (string, required)
+</ParamField>
+
+<ParamField path="initial_capacity" type="map(object)" default="null">
+  The capacity to initialize when the application is created. Each entry accepts:
+  - `initial_capacity_type` (string, required)
+  - `initial_capacity_config` (optional object) with `worker_count` and `worker_configuration` (containing `cpu`, `memory`, and optional `disk`)
+</ParamField>
+
+<ParamField path="interactive_configuration" type="object" default="null">
+  Enables the interactive use cases to use when running an application. Accepts:
+  - `livy_endpoint_enabled` (optional bool)
+  - `studio_enabled` (optional bool)
+</ParamField>
+
+<ParamField path="job_level_cost_allocation_configuration" type="object" default="null">
+  Configuration block for job-level cost allocation. Accepts:
+  - `enabled` (optional bool)
+</ParamField>
+
+<ParamField path="maximum_capacity" type="object" default="null">
+  The maximum capacity to allocate when the application is created. This is cumulative across all workers at any given point in time. No new resources will be created once any one of the defined limits is hit. Accepts:
+  - `cpu` (string, required)
+  - `memory` (string, required)
+  - `disk` (optional string)
+</ParamField>
+
+<ParamField path="network_configuration" type="object" default="null">
+  The network configuration for customer VPC connectivity. Accepts:
+  - `security_group_ids` (optional list(string), default: [])
+  - `subnet_ids` (optional list(string))
+</ParamField>
+
+<ParamField path="monitoring_configuration" type="object" default="null">
+  The monitoring configuration for the application. Accepts nested blocks for:
+  - `cloudwatch_logging_configuration` — with `enabled`, `log_group_name`, `log_stream_name_prefix`, `encryption_key_arn`, and `log_types`
+  - `managed_persistence_monitoring_configuration` — with `enabled` and `encryption_key_arn`
+  - `prometheus_monitoring_configuration` — with `remote_write_url`
+  - `s3_monitoring_configuration` — with `log_uri` and `encryption_key_arn`
+</ParamField>
+
+<ParamField path="runtime_configuration" type="list(object)" default="null">
+  The runtime configuration for the application. Each object accepts:
+  - `classification` (string, required)
+  - `properties` (optional map(string))
+</ParamField>
+
+<ParamField path="scheduler_configuration" type="object" default="null">
+  The scheduler configuration for the application. Accepts:
+  - `max_concurrent_runs` (optional number)
+  - `queue_timeout_minutes` (optional number)
+</ParamField>
+
+### Security group
+
+<ParamField path="create_security_group" type="bool" default="true">
+  Determines whether the security group is created.
+</ParamField>
+
+<ParamField path="security_group_name" type="string" default="null">
+  Name to use on security group created.
+</ParamField>
+
+<ParamField path="security_group_use_name_prefix" type="bool" default="true">
+  Determines whether the security group name (`security_group_name`) is used as a prefix.
+</ParamField>
+
+<ParamField path="security_group_description" type="string" default="null">
+  Description of the security group created.
+</ParamField>
+
+<ParamField path="security_group_tags" type="map(string)" default="{}">
+  A map of additional tags to add to the security group created.
+</ParamField>
+
+<ParamField path="security_group_ingress_rules" type="map(object)" default="null">
+  Security group ingress rules to add to the security group created. Each rule accepts `cidr_ipv4`, `cidr_ipv6`, `description`, `from_port`, `to_port`, `ip_protocol`, `prefix_list_id`, `referenced_security_group_id`, `name`, and `tags`.
+</ParamField>
+
+<ParamField path="security_group_egress_rules" type="map(object)" default='{ "all-traffic" = { description = "Allow all egress traffic", ip_protocol = "-1", cidr_ipv4 = "0.0.0.0/0" } }'>
+  Security group egress rules to add to the security group created. Each rule accepts the same fields as ingress rules.
+</ParamField>
+
+---
+
+## Outputs
+
+### Application
+
+<ResponseField name="arn" type="string">
+  Amazon Resource Name (ARN) of the application.
+</ResponseField>
+
+<ResponseField name="id" type="string">
+  ID of the application.
+</ResponseField>
+
+### Security group
+
+<ResponseField name="security_group_arn" type="string">
+  Amazon Resource Name (ARN) of the security group.
+</ResponseField>
+
+<ResponseField name="security_group_id" type="string">
+  ID of the security group.
+</ResponseField>

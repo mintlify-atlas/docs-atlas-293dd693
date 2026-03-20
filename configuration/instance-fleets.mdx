@@ -1,0 +1,347 @@
+---
+title: Instance fleets
+description: Configure EMR instance fleets to mix On-Demand and Spot instances with weighted capacity across multiple instance types.
+---
+
+Instance fleets let you provision capacity using a mix of On-Demand and Spot instances drawn from multiple instance types. EMR selects instances based on your target capacities and launch specifications, which helps you optimize for cost and availability.
+
+<Note>
+  Instance fleets and instance groups are mutually exclusive. You must choose one model for the entire cluster. Setting any `*_instance_fleet` variable will conflict with the corresponding `*_instance_group` variable.
+</Note>
+
+## Fleet types
+
+The module exposes three fleet variables, one per node role:
+
+| Variable | Node role | Resource |
+|---|---|---|
+| `master_instance_fleet` | Master | Inline in `aws_emr_cluster` |
+| `core_instance_fleet` | Core | Inline in `aws_emr_cluster` |
+| `task_instance_fleet` | Task | Separate `aws_emr_instance_fleet` resource |
+
+<Accordion title="master_instance_fleet">
+
+The master fleet controls the primary node that coordinates the cluster. For most clusters a single On-Demand master instance is sufficient.
+
+<ParamField path="master_instance_fleet.name" type="string" optional>
+  Display name for the fleet.
+</ParamField>
+
+<ParamField path="master_instance_fleet.target_on_demand_capacity" type="number" optional>
+  Number of On-Demand capacity units to provision. For master nodes, set this to `1`.
+</ParamField>
+
+<ParamField path="master_instance_fleet.target_spot_capacity" type="number" optional>
+  Number of Spot capacity units to provision.
+</ParamField>
+
+<ParamField path="master_instance_fleet.instance_type_configs" type="list(object)" optional>
+  List of instance type configurations the fleet can choose from. See [Instance type config](#instance-type-config) for nested attributes.
+</ParamField>
+
+<ParamField path="master_instance_fleet.launch_specifications" type="object" optional>
+  Spot and On-Demand launch strategies. See [Launch specifications](#launch-specifications) for nested attributes.
+</ParamField>
+
+```hcl
+master_instance_fleet = {
+  name                      = "master-fleet"
+  target_on_demand_capacity = 1
+  instance_type_configs = [
+    {
+      instance_type = "m5.xlarge"
+    }
+  ]
+}
+```
+
+</Accordion>
+
+<Accordion title="core_instance_fleet">
+
+The core fleet stores data in HDFS and runs compute tasks. You can split capacity across On-Demand and Spot to balance cost and resilience.
+
+<ParamField path="core_instance_fleet.name" type="string" optional>
+  Display name for the fleet.
+</ParamField>
+
+<ParamField path="core_instance_fleet.target_on_demand_capacity" type="number" optional>
+  On-Demand capacity units to provision.
+</ParamField>
+
+<ParamField path="core_instance_fleet.target_spot_capacity" type="number" optional>
+  Spot capacity units to provision.
+</ParamField>
+
+<ParamField path="core_instance_fleet.instance_type_configs" type="list(object)" optional>
+  List of instance type configurations. See [Instance type config](#instance-type-config).
+</ParamField>
+
+<ParamField path="core_instance_fleet.launch_specifications" type="object" optional>
+  Spot and On-Demand launch strategies. See [Launch specifications](#launch-specifications).
+</ParamField>
+
+```hcl
+core_instance_fleet = {
+  name                      = "core-fleet"
+  target_on_demand_capacity = 2
+  target_spot_capacity      = 2
+  instance_type_configs = [
+    {
+      instance_type     = "c4.large"
+      weighted_capacity = 1
+    },
+    {
+      bid_price_as_percentage_of_on_demand_price = 100
+      ebs_config = [{
+        size                 = 256
+        type                 = "gp3"
+        volumes_per_instance = 1
+      }]
+      instance_type     = "c5.xlarge"
+      weighted_capacity = 2
+    },
+    {
+      bid_price_as_percentage_of_on_demand_price = 100
+      instance_type                              = "c6i.xlarge"
+      weighted_capacity                          = 2
+    }
+  ]
+  launch_specifications = {
+    spot_specification = {
+      allocation_strategy      = "capacity-optimized"
+      block_duration_minutes   = 0
+      timeout_action           = "SWITCH_TO_ON_DEMAND"
+      timeout_duration_minutes = 5
+    }
+  }
+}
+```
+
+</Accordion>
+
+<Accordion title="task_instance_fleet">
+
+The task fleet adds compute-only capacity to the cluster. Task nodes do not store HDFS data, making them safe to run entirely on Spot instances.
+
+<ParamField path="task_instance_fleet.name" type="string" optional>
+  Display name for the fleet.
+</ParamField>
+
+<ParamField path="task_instance_fleet.target_on_demand_capacity" type="number" optional>
+  On-Demand capacity units to provision.
+</ParamField>
+
+<ParamField path="task_instance_fleet.target_spot_capacity" type="number" optional>
+  Spot capacity units to provision.
+</ParamField>
+
+<ParamField path="task_instance_fleet.instance_type_configs" type="list(object)" optional>
+  List of instance type configurations. See [Instance type config](#instance-type-config).
+</ParamField>
+
+<ParamField path="task_instance_fleet.launch_specifications" type="object" optional>
+  Spot and On-Demand launch strategies. See [Launch specifications](#launch-specifications).
+</ParamField>
+
+```hcl
+task_instance_fleet = {
+  name                      = "task-fleet"
+  target_on_demand_capacity = 1
+  target_spot_capacity      = 2
+  instance_type_configs = [
+    {
+      instance_type     = "c4.large"
+      weighted_capacity = 1
+    },
+    {
+      bid_price_as_percentage_of_on_demand_price = 100
+      ebs_config = [{
+        size                 = 256
+        type                 = "gp3"
+        volumes_per_instance = 1
+      }]
+      instance_type     = "c5.xlarge"
+      weighted_capacity = 2
+    }
+  ]
+  launch_specifications = {
+    spot_specification = {
+      allocation_strategy      = "capacity-optimized"
+      block_duration_minutes   = 0
+      timeout_action           = "SWITCH_TO_ON_DEMAND"
+      timeout_duration_minutes = 5
+    }
+  }
+}
+```
+
+</Accordion>
+
+## Instance type config
+
+Each entry in `instance_type_configs` describes one instance type that the fleet may use.
+
+<ParamField path="instance_type" type="string" required>
+  EC2 instance type, for example `"m5.xlarge"`.
+</ParamField>
+
+<ParamField path="weighted_capacity" type="number" optional>
+  Number of capacity units this instance type contributes toward the fleet's target. When omitted, each instance counts as one unit.
+</ParamField>
+
+<ParamField path="bid_price" type="string" optional>
+  Maximum Spot price in USD per instance-hour. Mutually exclusive with `bid_price_as_percentage_of_on_demand_price`.
+</ParamField>
+
+<ParamField path="bid_price_as_percentage_of_on_demand_price" type="number" default="60">
+  Maximum Spot price expressed as a percentage of the current On-Demand price. Defaults to `60`.
+</ParamField>
+
+<ParamField path="ebs_config" type="list(object)" optional>
+  EBS volumes to attach to each instance of this type.
+
+  - `size` — Volume size in GiB. Default: `256`.
+  - `type` — EBS volume type. Default: `"gp3"`.
+  - `iops` — Provisioned IOPS for `io1`/`io2` volumes.
+  - `volumes_per_instance` — Number of volumes to attach per instance.
+</ParamField>
+
+## Launch specifications
+
+Launch specifications control how EMR fulfills Spot and On-Demand requests for the fleet.
+
+### Spot specification
+
+<ParamField path="launch_specifications.spot_specification.allocation_strategy" type="string" default="capacity-optimized">
+  Strategy EMR uses to select Spot pools. `"capacity-optimized"` prioritizes pools with the most available capacity, reducing interruption risk.
+</ParamField>
+
+<ParamField path="launch_specifications.spot_specification.block_duration_minutes" type="number" optional>
+  Duration in minutes for a Spot block (defined-duration Spot). Allowed values: `60`, `120`, `180`, `240`, `300`, `360`. Set to `0` to disable.
+</ParamField>
+
+<ParamField path="launch_specifications.spot_specification.timeout_action" type="string" default="SWITCH_TO_ON_DEMAND">
+  Action to take if Spot capacity cannot be provisioned within `timeout_duration_minutes`. `"SWITCH_TO_ON_DEMAND"` falls back to On-Demand; `"TERMINATE_CLUSTER"` stops the launch.
+</ParamField>
+
+<ParamField path="launch_specifications.spot_specification.timeout_duration_minutes" type="number" default="60">
+  Minutes to wait for Spot capacity before taking `timeout_action`.
+</ParamField>
+
+### On-Demand specification
+
+<ParamField path="launch_specifications.on_demand_specification.allocation_strategy" type="string" default="lowest-price">
+  Strategy for selecting On-Demand instance pools. Currently only `"lowest-price"` is supported.
+</ParamField>
+
+## Complete example
+
+The following example creates a private cluster with all three fleet types configured:
+
+```hcl
+module "emr" {
+  source = "terraform-aws-modules/emr/aws"
+
+  name = "example-instance-fleet"
+
+  release_label = "emr-7.9.0"
+  applications  = ["spark", "trino"]
+  auto_termination_policy = {
+    idle_timeout = 3600
+  }
+
+  master_instance_fleet = {
+    name                      = "master-fleet"
+    target_on_demand_capacity = 1
+    instance_type_configs = [
+      {
+        instance_type = "m5.xlarge"
+      }
+    ]
+  }
+
+  core_instance_fleet = {
+    name                      = "core-fleet"
+    target_on_demand_capacity = 2
+    target_spot_capacity      = 2
+    instance_type_configs = [
+      {
+        instance_type     = "c4.large"
+        weighted_capacity = 1
+      },
+      {
+        bid_price_as_percentage_of_on_demand_price = 100
+        ebs_config = [{
+          size                 = 256
+          type                 = "gp3"
+          volumes_per_instance = 1
+        }]
+        instance_type     = "c5.xlarge"
+        weighted_capacity = 2
+      },
+      {
+        bid_price_as_percentage_of_on_demand_price = 100
+        instance_type                              = "c6i.xlarge"
+        weighted_capacity                          = 2
+      }
+    ]
+    launch_specifications = {
+      spot_specification = {
+        allocation_strategy      = "capacity-optimized"
+        block_duration_minutes   = 0
+        timeout_action           = "SWITCH_TO_ON_DEMAND"
+        timeout_duration_minutes = 5
+      }
+    }
+  }
+
+  task_instance_fleet = {
+    name                      = "task-fleet"
+    target_on_demand_capacity = 1
+    target_spot_capacity      = 2
+    instance_type_configs = [
+      {
+        instance_type     = "c4.large"
+        weighted_capacity = 1
+      },
+      {
+        bid_price_as_percentage_of_on_demand_price = 100
+        ebs_config = [{
+          size                 = 256
+          type                 = "gp3"
+          volumes_per_instance = 1
+        }]
+        instance_type     = "c5.xlarge"
+        weighted_capacity = 2
+      }
+    ]
+    launch_specifications = {
+      spot_specification = {
+        allocation_strategy      = "capacity-optimized"
+        block_duration_minutes   = 0
+        timeout_action           = "SWITCH_TO_ON_DEMAND"
+        timeout_duration_minutes = 5
+      }
+    }
+  }
+
+  ebs_root_volume_size = 64
+  ec2_attributes = {
+    # Subnets should be private subnets and tagged with
+    # { "for-use-with-amazon-emr-managed-policies" = true }
+    subnet_ids = ["subnet-abcde012", "subnet-bcde012a", "subnet-fghi345a"]
+  }
+  vpc_id = "vpc-1234556abcdef"
+
+  scale_down_behavior    = "TERMINATE_AT_TASK_COMPLETION"
+  step_concurrency_level = 3
+  termination_protection = false
+  visible_to_all_users   = true
+
+  tags = {
+    Terraform   = "true"
+    Environment = "dev"
+  }
+}
+```

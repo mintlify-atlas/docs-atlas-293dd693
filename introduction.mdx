@@ -1,0 +1,83 @@
+---
+title: 'Introduction'
+description: 'A Terraform module for provisioning AWS EMR resources across all supported cluster types.'
+---
+
+This module creates and manages AWS EMR resources. It supports four cluster deployment models — from traditional EC2-based clusters to fully serverless and Kubernetes-native options — along with the supporting security groups and IAM roles each cluster type requires.
+
+## What the module creates
+
+Depending on which cluster type you configure, the module can provision:
+
+- EMR clusters on EC2 using instance fleets or instance groups (public or private subnets)
+- EMR Serverless applications
+- EMR Virtual Clusters running on Amazon EKS
+- EMR Studios
+- Security groups for `master`, `core`, and `task` nodes, plus a `service` security group for private clusters
+- IAM roles for autoscaling, the EMR service, and EC2 instance profiles
+
+## Cluster types
+
+<CardGroup cols={2}>
+  <Card title="EC2 clusters" icon="server" href="/clusters/ec2-cluster">
+    Deploy Spark, Hive, and other frameworks on EC2 using instance fleets or instance groups in public or private subnets.
+  </Card>
+  <Card title="Serverless" icon="cloud" href="/clusters/serverless">
+    Run Spark and Hive workloads without managing cluster infrastructure using EMR Serverless.
+  </Card>
+  <Card title="Virtual clusters (EKS)" icon="circle-nodes" href="/clusters/virtual-cluster">
+    Run EMR workloads on your existing Amazon EKS clusters using EMR on EKS virtual clusters.
+  </Card>
+  <Card title="Studios" icon="display" href="/clusters/studio">
+    Create collaborative development environments for data engineers and scientists using EMR Studio.
+  </Card>
+</CardGroup>
+
+## Requirements
+
+| Tool | Minimum version |
+|------|-----------------|
+| Terraform | `>= 1.5.7` |
+| AWS provider (`hashicorp/aws`) | `>= 6.35` |
+
+## VPC and subnet tagging
+
+<Warning>
+  The module tags its own resources with `{ "for-use-with-amazon-emr-managed-policies" = true }` to support the recommended `AmazonEMRServicePolicy_v2` managed policy. You must apply the same tag to your VPC and subnets manually. Without it, EMR cannot create or manage the necessary security groups.
+
+  See the [EMR managed IAM policies guide](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-managed-iam-policies.html) for details.
+</Warning>
+
+## Module sources
+
+The module is published to the Terraform Registry as four sub-modules, one per cluster type. Pin to a specific version to avoid unexpected changes.
+
+```hcl
+# EC2 clusters (instance fleets or instance groups)
+module "emr" {
+  source  = "terraform-aws-modules/emr/aws"
+  version = "~> 1.0"
+}
+
+# Serverless
+module "emr_serverless" {
+  source  = "terraform-aws-modules/emr/aws//modules/serverless"
+  version = "~> 1.0"
+}
+
+# Virtual clusters (EKS)
+module "emr_virtual_cluster" {
+  source  = "terraform-aws-modules/emr/aws//modules/virtual-cluster"
+  version = "~> 1.0"
+}
+
+# Studios
+module "emr_studio" {
+  source  = "terraform-aws-modules/emr/aws//modules/studio"
+  version = "~> 1.0"
+}
+```
+
+<Note>
+  If you are new to AWS EMR, start with the [Quickstart](/quickstart) to deploy a private EC2 cluster with instance fleet in a few minutes.
+</Note>

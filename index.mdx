@@ -1,97 +1,95 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "AWS EMR Terraform Module"
+description: "Terraform module to create and manage AWS EMR resources including EC2-based clusters, serverless applications, virtual clusters on EKS, and EMR Studios."
 ---
 
-## Setting up
-
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Deploy your first EMR cluster in minutes with Terraform.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Cluster Types" icon="server" href="/clusters/ec2-cluster">
+    Explore EC2, Serverless, Virtual, and Studio cluster options.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Configuration Reference" icon="sliders" href="/reference/inputs">
+    Full reference for all module inputs and outputs.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Examples" icon="code" href="/examples/private-cluster">
+    Working example configurations for common use cases.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What this module provides
 
-Everything you need to create world-class documentation.
+The `terraform-aws-modules/emr` module simplifies deploying AWS EMR at scale. It handles cluster provisioning, IAM roles, security groups, and scaling policies so you can focus on your data workloads.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+<CardGroup cols={2}>
+  <Card title="EC2 Clusters" icon="microchip" href="/clusters/ec2-cluster">
+    Deploy EMR clusters using instance fleets or instance groups in public or private subnets, with Spark, Hive, Trino, and more.
   </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
+  <Card title="Serverless" icon="bolt" href="/clusters/serverless">
+    Run Spark and Hive workloads without managing EC2 infrastructure using EMR Serverless.
   </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
+  <Card title="Virtual Clusters (EKS)" icon="cubes" href="/clusters/virtual-cluster">
+    Run EMR workloads on your existing Amazon EKS clusters for unified Kubernetes management.
   </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
+  <Card title="EMR Studio" icon="display" href="/clusters/studio">
+    Provide data scientists and engineers with a collaborative notebook environment backed by EMR.
   </Card>
-</Columns>
+</CardGroup>
 
-## Need inspiration?
+## Key capabilities
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={3}>
+  <Card title="Instance Fleets" icon="layer-group" href="/configuration/instance-fleets">
+    Mix On-Demand and Spot instances with weighted capacity for cost-optimized clusters.
+  </Card>
+  <Card title="Instance Groups" icon="sitemap" href="/configuration/instance-groups">
+    Simple fixed-size node groups for predictable workloads.
+  </Card>
+  <Card title="IAM Roles" icon="shield-halved" href="/configuration/iam-roles">
+    Automatically provisioned service, autoscaling, and EC2 instance profile roles.
+  </Card>
+  <Card title="Security Groups" icon="lock" href="/configuration/security-groups">
+    Managed security groups for master, core, task, and service nodes.
+  </Card>
+  <Card title="Managed Scaling" icon="chart-line" href="/configuration/scaling">
+    Automatically scale clusters up and down based on workload demand.
+  </Card>
+  <Card title="Private Clusters" icon="network-wired" href="/examples/private-cluster">
+    Deploy in private subnets with S3 and EMR VPC endpoints for secure connectivity.
+  </Card>
+</CardGroup>
+
+## Requirements
+
+<Note>
+  This module requires Terraform `>= 1.5.7` and the AWS provider `>= 6.35`. VPC and subnet resources must be tagged with `{ "for-use-with-amazon-emr-managed-policies" = true }` to support the recommended IAM policy `AmazonEMRServicePolicy_v2`.
+</Note>
+
+## Module sources
+
+```hcl
+# Root module — EC2-based clusters
+module "emr" {
+  source  = "terraform-aws-modules/emr/aws"
+  version = "~> 1.0"
+}
+
+# EMR Serverless
+module "emr_serverless" {
+  source  = "terraform-aws-modules/emr/aws//modules/serverless"
+  version = "~> 1.0"
+}
+
+# EMR Virtual Cluster (EKS)
+module "emr_virtual_cluster" {
+  source  = "terraform-aws-modules/emr/aws//modules/virtual-cluster"
+  version = "~> 1.0"
+}
+
+# EMR Studio
+module "emr_studio" {
+  source  = "terraform-aws-modules/emr/aws//modules/studio"
+  version = "~> 1.0"
+}
+```

@@ -1,0 +1,385 @@
+---
+title: 'Inputs'
+description: 'Complete reference for all root module input variables.'
+sidebarTitle: 'Inputs'
+---
+
+## Cluster
+
+<ParamField path="create" type="bool" default="true">
+  Controls if resources should be created (affects nearly all resources).
+</ParamField>
+
+<ParamField path="name" type="string" default='""'>
+  Name of the job flow.
+</ParamField>
+
+<ParamField path="region" type="string" default="null">
+  Region where the resource(s) will be managed. Defaults to the Region set in the provider configuration.
+</ParamField>
+
+<ParamField path="release_label" type="string" default="null">
+  Release label for the Amazon EMR release.
+</ParamField>
+
+<ParamField path="release_label_filters" type="map(object)" default='{ default = { prefix = "emr-7" } }'>
+  Map of release label filters used to look up a release label. Each entry accepts `application` (optional string) and `prefix` (optional string).
+</ParamField>
+
+<ParamField path="applications" type="list(string)" default="[]">
+  A case-insensitive list of applications for Amazon EMR to install and configure when launching the cluster.
+</ParamField>
+
+<ParamField path="configurations_json" type="string" default="null">
+  JSON string for supplying list of configurations for the EMR cluster.
+</ParamField>
+
+<ParamField path="configurations" type="string" default="null">
+  List of configurations supplied for the EMR cluster you are creating. Supply a configuration object for applications to override their default configuration.
+</ParamField>
+
+<ParamField path="additional_info" type="string" default="null">
+  JSON string for selecting additional features such as adding proxy information. Note: Currently there is no API to retrieve the value of this argument after EMR cluster creation from provider, therefore Terraform cannot detect drift from the actual EMR cluster if its value is changed outside Terraform.
+</ParamField>
+
+<ParamField path="bootstrap_action" type="list(object)" default="null">
+  Ordered list of bootstrap actions that will be run before Hadoop is started on the cluster nodes. Each object accepts:
+  - `name` (string, required)
+  - `path` (string, required)
+  - `args` (list(string), optional)
+</ParamField>
+
+<ParamField path="step" type="list(object)" default="null">
+  Steps to run when creating the cluster. Each object accepts:
+  - `action_on_failure` (string, required)
+  - `name` (string, required)
+  - `hadoop_jar_step` (object, optional) with `jar`, `args`, `main_class`, `properties`
+</ParamField>
+
+<ParamField path="list_steps_states" type="list(string)" default="[]">
+  List of [step states](https://docs.aws.amazon.com/emr/latest/APIReference/API_StepStatus.html) used to filter returned steps.
+</ParamField>
+
+---
+
+## Instance configuration
+
+<ParamField path="master_instance_fleet" type="object" default="null">
+  Configuration block to use an [Instance Fleet](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-instance-fleet.html) for the master node type. Cannot be specified if any `master_instance_group` configuration blocks are set. Accepts:
+  - `name` (optional string)
+  - `target_on_demand_capacity` (optional number)
+  - `target_spot_capacity` (optional number)
+  - `instance_type_configs` (optional list of objects)
+  - `launch_specifications` (optional object with `on_demand_specification` and `spot_specification`)
+</ParamField>
+
+<ParamField path="core_instance_fleet" type="object" default="null">
+  Configuration block to use an [Instance Fleet](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-instance-fleet.html) for the core node type. Cannot be specified if any `core_instance_group` configuration blocks are set. Accepts the same structure as `master_instance_fleet`.
+</ParamField>
+
+<ParamField path="task_instance_fleet" type="object" default="null">
+  Configuration block to use an [Instance Fleet](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-instance-fleet.html) for the task node type. Cannot be specified if any `task_instance_group` configuration blocks are set. Accepts the same structure as `master_instance_fleet`.
+</ParamField>
+
+<ParamField path="master_instance_group" type="object" default="null">
+  Configuration block to use an [Instance Group](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-instance-group-configuration.html#emr-plan-instance-groups) for the [master node type](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-master-core-task-nodes.html#emr-plan-master). Accepts:
+  - `instance_type` (string, required)
+  - `bid_price` (optional string)
+  - `instance_count` (optional number)
+  - `name` (optional string)
+  - `ebs_config` (optional list of objects)
+</ParamField>
+
+<ParamField path="core_instance_group" type="object" default="null">
+  Configuration block to use an [Instance Group] for the core node type. Accepts:
+  - `instance_type` (string, required)
+  - `autoscaling_policy` (optional string)
+  - `bid_price` (optional string)
+  - `instance_count` (optional number)
+  - `name` (optional string)
+  - `ebs_config` (optional list of objects)
+</ParamField>
+
+<ParamField path="task_instance_group" type="object" default="null">
+  Configuration block to use an [Instance Group](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-instance-group-configuration.html#emr-plan-instance-groups) for the [task node type](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-master-core-task-nodes.html#emr-plan-master). Accepts:
+  - `instance_type` (string, required)
+  - `autoscaling_policy` (optional string)
+  - `bid_price` (optional string)
+  - `configurations_json` (optional string)
+  - `ebs_optimized` (optional bool, default: true)
+  - `instance_count` (optional number)
+  - `name` (optional string)
+  - `ebs_config` (optional list of objects)
+</ParamField>
+
+---
+
+## Node settings
+
+<ParamField path="ebs_root_volume_size" type="number" default="null">
+  Size in GiB of the EBS root device volume of the Linux AMI that is used for each EC2 instance. Available in Amazon EMR version 4.x and later.
+</ParamField>
+
+<ParamField path="custom_ami_id" type="string" default="null">
+  Custom Amazon Linux AMI for the cluster (instead of an EMR-owned AMI). Available in Amazon EMR version 5.7.0 and later.
+</ParamField>
+
+<ParamField path="os_release_label" type="string" default="null">
+  Amazon Linux release for all nodes in a cluster launch RunJobFlow request. If not specified, Amazon EMR uses the latest validated Amazon Linux release for cluster launch.
+</ParamField>
+
+<ParamField path="ec2_attributes" type="object" default="null">
+  Attributes for the EC2 instances running the job flow. Accepts:
+  - `additional_master_security_groups` (optional string)
+  - `additional_slave_security_groups` (optional string)
+  - `emr_managed_master_security_group` (optional string)
+  - `emr_managed_slave_security_group` (optional string)
+  - `instance_profile` (optional string)
+  - `key_name` (optional string)
+  - `service_access_security_group` (optional string)
+  - `subnet_id` (optional string)
+  - `subnet_ids` (optional list(string))
+</ParamField>
+
+---
+
+## Cluster behavior
+
+<ParamField path="scale_down_behavior" type="string" default='"TERMINATE_AT_TASK_COMPLETION"'>
+  Way that individual Amazon EC2 instances terminate when an automatic scale-in activity occurs or an instance group is resized.
+</ParamField>
+
+<ParamField path="step_concurrency_level" type="number" default="null">
+  Number of steps that can be executed concurrently. You can specify a maximum of 256 steps. Only valid for EMR clusters with `release_label` 5.28.0 or greater (default is 1).
+</ParamField>
+
+<ParamField path="keep_job_flow_alive_when_no_steps" type="bool" default="null">
+  Switch on/off run cluster with no steps or when all steps are complete (default is on).
+</ParamField>
+
+<ParamField path="visible_to_all_users" type="bool" default="null">
+  Whether the job flow is visible to all IAM users of the AWS account associated with the job flow. Default value is `true`.
+</ParamField>
+
+<ParamField path="termination_protection" type="bool" default="null">
+  Switch on/off termination protection (default is `false`, except when using multiple master nodes). Before attempting to destroy the resource when termination protection is enabled, this configuration must be applied with its value set to `false`.
+</ParamField>
+
+<ParamField path="unhealthy_node_replacement" type="bool" default="true">
+  Whether Amazon EMR should gracefully replace core nodes that have degraded within the cluster.
+</ParamField>
+
+<ParamField path="auto_termination_policy" type="object" default="null">
+  An auto-termination policy for an Amazon EMR cluster. Accepts:
+  - `idle_timeout` (optional number) — amount of idle time in seconds after which a cluster automatically terminates.
+</ParamField>
+
+<ParamField path="managed_scaling_policy" type="object" default="null">
+  Compute limit configuration for a [Managed Scaling Policy](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-managed-scaling.html). Accepts:
+  - `maximum_capacity_units` (number, required)
+  - `minimum_capacity_units` (number, required)
+  - `unit_type` (string, required)
+  - `maximum_core_capacity_units` (optional number)
+  - `maximum_ondemand_capacity_units` (optional number)
+  - `scaling_strategy` (optional string)
+  - `utilization_performance_index` (optional number)
+</ParamField>
+
+<ParamField path="placement_group_config" type="list(object)" default="null">
+  The specified placement group configuration. Each object accepts:
+  - `instance_role` (string, required)
+  - `placement_strategy` (optional string)
+</ParamField>
+
+---
+
+## Logging and security
+
+<ParamField path="log_uri" type="string" default="null">
+  S3 bucket to write the log files of the job flow. If a value is not provided, logs are not created.
+</ParamField>
+
+<ParamField path="log_encryption_kms_key_id" type="string" default="null">
+  AWS KMS customer master key (CMK) key ID or ARN used for encrypting log files. This attribute is only available with EMR version 5.30.0 and later, excluding EMR 6.0.0.
+</ParamField>
+
+<ParamField path="security_configuration" type="string" default="null">
+  Security configuration to create, or attach if `create_security_configuration` is `false`. Only valid for EMR clusters with `release_label` 4.8.0 or greater.
+</ParamField>
+
+<ParamField path="security_configuration_name" type="string" default="null">
+  Name of the security configuration to create, or attach if `create_security_configuration` is `false`. Only valid for EMR clusters with `release_label` 4.8.0 or greater.
+</ParamField>
+
+<ParamField path="security_configuration_use_name_prefix" type="bool" default="true">
+  Determines whether `security_configuration_name` is used as a prefix.
+</ParamField>
+
+<ParamField path="create_security_configuration" type="bool" default="false">
+  Determines whether a security configuration is created.
+</ParamField>
+
+<ParamField path="kerberos_attributes" type="object" default="null">
+  Kerberos configuration for the cluster. Accepts:
+  - `kdc_admin_password` (string, required)
+  - `realm` (string, required)
+  - `ad_domain_join_password` (optional string)
+  - `ad_domain_join_user` (optional string)
+  - `cross_realm_trust_principal_password` (optional string)
+</ParamField>
+
+<ParamField path="is_private_cluster" type="bool" default="true">
+  Identifies whether the cluster is created in a private subnet.
+</ParamField>
+
+---
+
+## IAM
+
+<ParamField path="create_service_iam_role" type="bool" default="true">
+  Determines whether the service IAM role should be created.
+</ParamField>
+
+<ParamField path="service_iam_role_arn" type="string" default="null">
+  The ARN of an existing IAM role to use for the service.
+</ParamField>
+
+<ParamField path="service_iam_role_name" type="string" default="null">
+  Name to use on the IAM role created.
+</ParamField>
+
+<ParamField path="service_iam_role_description" type="string" default="null">
+  Description of the role.
+</ParamField>
+
+<ParamField path="service_iam_role_policies" type="map(string)" default='{ AmazonEMRServicePolicy_v2 = "arn:aws:iam::aws:policy/service-role/AmazonEMRServicePolicy_v2" }'>
+  Map of IAM policies to attach to the service role.
+</ParamField>
+
+<ParamField path="service_pass_role_policy_name" type="string" default="null">
+  Name to use on the IAM policy created.
+</ParamField>
+
+<ParamField path="service_pass_role_policy_description" type="string" default="null">
+  Description of the policy.
+</ParamField>
+
+<ParamField path="create_autoscaling_iam_role" type="bool" default="true">
+  Determines whether the autoscaling IAM role should be created.
+</ParamField>
+
+<ParamField path="autoscaling_iam_role_arn" type="string" default="null">
+  The ARN of an existing IAM role to use for autoscaling.
+</ParamField>
+
+<ParamField path="autoscaling_iam_role_name" type="string" default="null">
+  Name to use on the IAM role created.
+</ParamField>
+
+<ParamField path="autoscaling_iam_role_description" type="string" default="null">
+  Description of the role.
+</ParamField>
+
+<ParamField path="create_iam_instance_profile" type="bool" default="true">
+  Determines whether the EC2 IAM role/instance profile should be created.
+</ParamField>
+
+<ParamField path="iam_instance_profile_name" type="string" default="null">
+  Name to use on the EC2 IAM role/instance profile created.
+</ParamField>
+
+<ParamField path="iam_instance_profile_description" type="string" default="null">
+  Description of the EC2 IAM role/instance profile.
+</ParamField>
+
+<ParamField path="iam_instance_profile_policies" type="map(string)" default='{ AmazonElasticMapReduceforEC2Role = "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role" }'>
+  Map of IAM policies to attach to the EC2 IAM role/instance profile.
+</ParamField>
+
+<ParamField path="iam_instance_profile_role_arn" type="string" default="null">
+  The ARN of an existing IAM role to use if passing in a custom instance profile and creating a service role.
+</ParamField>
+
+<ParamField path="iam_role_path" type="string" default="null">
+  IAM role path.
+</ParamField>
+
+<ParamField path="iam_role_permissions_boundary" type="string" default="null">
+  ARN of the policy that is used to set the permissions boundary for the IAM role.
+</ParamField>
+
+<ParamField path="iam_role_use_name_prefix" type="bool" default="true">
+  Determines whether the IAM role name is used as a prefix.
+</ParamField>
+
+<ParamField path="iam_role_tags" type="map(string)" default="{}">
+  A map of additional tags to add to the IAM role created.
+</ParamField>
+
+---
+
+## Security groups
+
+<ParamField path="vpc_id" type="string" default='""'>
+  The ID of the Amazon Virtual Private Cloud (Amazon VPC) where the security groups will be created.
+</ParamField>
+
+<ParamField path="create_managed_security_groups" type="bool" default="true">
+  Determines whether managed security groups are created.
+</ParamField>
+
+<ParamField path="managed_security_group_name" type="string" default="null">
+  Name to use on managed security group created. Note: `-master`, `-slave`, and `-service` will be appended to this name to distinguish.
+</ParamField>
+
+<ParamField path="managed_security_group_use_name_prefix" type="bool" default="true">
+  Determines whether the security group name (`security_group_name`) is used as a prefix.
+</ParamField>
+
+<ParamField path="managed_security_group_tags" type="map(string)" default="{}">
+  A map of additional tags to add to the security group created.
+</ParamField>
+
+<ParamField path="master_security_group_description" type="string" default='"Managed master security group"'>
+  Description of the master security group created.
+</ParamField>
+
+<ParamField path="master_security_group_ingress_rules" type="map(object)" default="null">
+  Security group ingress rules to add to the master security group. Each rule accepts `cidr_ipv4`, `cidr_ipv6`, `description`, `from_port`, `to_port`, `ip_protocol`, `prefix_list_id`, `referenced_security_group_id`, `reference_slave_security_group`, `name`, and `tags`.
+</ParamField>
+
+<ParamField path="master_security_group_egress_rules" type="map(object)" default='{ "all-traffic" = { description = "Allow all egress traffic", ip_protocol = "-1", cidr_ipv4 = "0.0.0.0/0" } }'>
+  Security group egress rules to add to the master security group. Each rule accepts the same fields as ingress rules.
+</ParamField>
+
+<ParamField path="slave_security_group_description" type="string" default='"Managed slave security group"'>
+  Description of the slave security group created.
+</ParamField>
+
+<ParamField path="slave_security_group_ingress_rules" type="map(object)" default="null">
+  Security group ingress rules to add to the slave security group. Each rule accepts `cidr_ipv4`, `cidr_ipv6`, `description`, `from_port`, `to_port`, `ip_protocol`, `prefix_list_id`, `referenced_security_group_id`, `reference_master_security_group`, `name`, and `tags`.
+</ParamField>
+
+<ParamField path="slave_security_group_egress_rules" type="map(object)" default='{ "all-traffic" = { description = "Allow all egress traffic", ip_protocol = "-1", cidr_ipv4 = "0.0.0.0/0" } }'>
+  Security group egress rules to add to the slave security group. Each rule accepts the same fields as ingress rules.
+</ParamField>
+
+<ParamField path="service_security_group_description" type="string" default='"Managed service access security group"'>
+  Description of the service access security group created.
+</ParamField>
+
+<ParamField path="service_security_group_ingress_rules" type="map(object)" default="null">
+  Security group ingress rules to add to the service access security group. Each rule accepts `cidr_ipv4`, `cidr_ipv6`, `description`, `from_port`, `to_port`, `ip_protocol`, `prefix_list_id`, `referenced_security_group_id`, `reference_master_security_group`, `name`, and `tags`.
+</ParamField>
+
+<ParamField path="service_security_group_egress_rules" type="map(object)" default='{ "all-traffic" = { description = "Allow all egress traffic", ip_protocol = "-1", cidr_ipv4 = "0.0.0.0/0" } }'>
+  Security group egress rules to add to the service access security group. Each rule accepts the same fields as ingress rules.
+</ParamField>
+
+---
+
+## Tags
+
+<ParamField path="tags" type="map(string)" default="{}">
+  A map of tags to add to all resources.
+</ParamField>

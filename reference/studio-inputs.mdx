@@ -1,0 +1,319 @@
+---
+title: 'Studio submodule'
+description: 'Input and output reference for the EMR Studio submodule.'
+sidebarTitle: 'Studio'
+---
+
+## Inputs
+
+### General
+
+<ParamField path="create" type="bool" default="true">
+  Controls if resources should be created (affects nearly all resources).
+</ParamField>
+
+<ParamField path="region" type="string" default="null">
+  Region where the resource(s) will be managed. Defaults to the Region set in the provider configuration.
+</ParamField>
+
+<ParamField path="tags" type="map(string)" default="{}">
+  A map of tags to add to all resources.
+</ParamField>
+
+### Studio
+
+<ParamField path="name" type="string" default='""'>
+  A descriptive name for the Amazon EMR Studio.
+</ParamField>
+
+<ParamField path="description" type="string" default="null">
+  A detailed description of the Amazon EMR Studio.
+</ParamField>
+
+<ParamField path="auth_mode" type="string" default='"IAM"'>
+  Specifies whether the Studio authenticates users using IAM or Amazon Web Services SSO. Valid values are `SSO` or `IAM`.
+</ParamField>
+
+<ParamField path="default_s3_location" type="string" default='""'>
+  The Amazon S3 location to back up Amazon EMR Studio Workspaces and notebook files.
+</ParamField>
+
+<ParamField path="encryption_key_arn" type="string" default="null">
+  The AWS KMS key identifier (ARN) used to encrypt Amazon EMR Studio workspace and notebook files when backed up to Amazon S3.
+</ParamField>
+
+<ParamField path="vpc_id" type="string" default='""'>
+  The ID of the Amazon Virtual Private Cloud (Amazon VPC) to associate with the Studio.
+</ParamField>
+
+<ParamField path="subnet_ids" type="list(string)" default="[]">
+  A list of subnet IDs to associate with the Amazon EMR Studio. A Studio can have a maximum of 5 subnets. The subnets must belong to the VPC specified by `vpc_id`.
+</ParamField>
+
+<ParamField path="idp_auth_url" type="string" default="null">
+  The authentication endpoint of your identity provider (IdP). Specify this value when you use IAM authentication and want to let federated users log in to a Studio with the Studio URL and credentials from your IdP.
+</ParamField>
+
+<ParamField path="idp_relay_state_parameter_name" type="string" default="null">
+  The name that your identity provider (IdP) uses for its RelayState parameter. For example, `RelayState` or `TargetSource`.
+</ParamField>
+
+<ParamField path="session_mappings" type="map(object)" default="null">
+  A map of session mapping definitions to apply to the Studio. Each entry accepts:
+  - `identity_type` (string, required)
+  - `identity_id` (optional string)
+  - `identity_name` (optional string)
+  - `session_policy_arn` (optional string)
+</ParamField>
+
+### Service IAM role
+
+<ParamField path="create_service_role" type="bool" default="true">
+  Determines whether the service IAM role should be created.
+</ParamField>
+
+<ParamField path="service_role_arn" type="string" default="null">
+  The ARN of an existing IAM role to use for the service.
+</ParamField>
+
+<ParamField path="service_role_name" type="string" default="null">
+  Name to use on the IAM role created.
+</ParamField>
+
+<ParamField path="service_role_use_name_prefix" type="bool" default="true">
+  Determines whether the IAM role name is used as a prefix.
+</ParamField>
+
+<ParamField path="service_role_description" type="string" default="null">
+  Description of the role.
+</ParamField>
+
+<ParamField path="service_role_path" type="string" default="null">
+  IAM role path.
+</ParamField>
+
+<ParamField path="service_role_permissions_boundary" type="string" default="null">
+  ARN of the policy that is used to set the permissions boundary for the IAM role.
+</ParamField>
+
+<ParamField path="service_role_policies" type="map(string)" default="{}">
+  Map of IAM policies to attach to the service role.
+</ParamField>
+
+<ParamField path="service_role_tags" type="map(string)" default="{}">
+  A map of additional tags to add to the IAM role created.
+</ParamField>
+
+### Service IAM role policy
+
+<ParamField path="create_service_role_policy" type="bool" default="true">
+  Determines whether the service IAM role policy should be created.
+</ParamField>
+
+<ParamField path="service_role_secrets_manager_arns" type="list(string)" default="[]">
+  A list of Amazon Web Services Secrets Manager secret ARNs to allow use of Git credentials stored in AWS Secrets Manager to link Git repositories to a Workspace.
+</ParamField>
+
+<ParamField path="service_role_s3_bucket_arns" type="list(string)" default="[]">
+  A list of Amazon S3 bucket ARNs to allow permission to read/write from the Amazon EMR Studio.
+</ParamField>
+
+<ParamField path="service_role_statements" type="map(object)" default="null">
+  A map of IAM policy [statements](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document#statement) for custom permission usage. Each entry accepts `sid`, `actions`, `not_actions`, `effect`, `resources`, `not_resources`, `principals`, `not_principals`, and `condition`.
+</ParamField>
+
+### User IAM role
+
+<ParamField path="create_user_role" type="bool" default="true">
+  Determines whether the user IAM role should be created.
+</ParamField>
+
+<ParamField path="user_role_arn" type="string" default="null">
+  The ARN of an existing IAM role to use for the user.
+</ParamField>
+
+<ParamField path="user_role_name" type="string" default="null">
+  Name to use on the IAM role created.
+</ParamField>
+
+<ParamField path="user_role_use_name_prefix" type="bool" default="true">
+  Determines whether the IAM role name is used as a prefix.
+</ParamField>
+
+<ParamField path="user_role_description" type="string" default="null">
+  Description of the role.
+</ParamField>
+
+<ParamField path="user_role_path" type="string" default="null">
+  IAM role path.
+</ParamField>
+
+<ParamField path="user_role_permissions_boundary" type="string" default="null">
+  ARN of the policy that is used to set the permissions boundary for the IAM role.
+</ParamField>
+
+<ParamField path="user_role_policies" type="map(string)" default="{}">
+  Map of IAM policies to attach to the user role.
+</ParamField>
+
+<ParamField path="user_role_tags" type="map(string)" default="{}">
+  A map of additional tags to add to the IAM role created.
+</ParamField>
+
+### User IAM role policy
+
+<ParamField path="create_user_role_policy" type="bool" default="true">
+  Determines whether the user IAM role policy should be created.
+</ParamField>
+
+<ParamField path="user_role_s3_bucket_arns" type="list(string)" default="[]">
+  A list of Amazon S3 bucket ARNs to allow permission to read/write from the Amazon EMR Studio user role.
+</ParamField>
+
+<ParamField path="user_role_statements" type="map(object)" default="null">
+  A map of IAM policy [statements](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document#statement) for custom permission usage. Each entry accepts `sid`, `actions`, `not_actions`, `effect`, `resources`, `not_resources`, `principals`, `not_principals`, and `condition`.
+</ParamField>
+
+### Security groups
+
+<ParamField path="create_security_groups" type="bool" default="true">
+  Determines whether security groups for the EMR Studio engine and workspace are created.
+</ParamField>
+
+<ParamField path="security_group_name" type="string" default="null">
+  Name to use on security group created. Note: `-engine` and `-workspace` will be appended to this name to distinguish.
+</ParamField>
+
+<ParamField path="security_group_use_name_prefix" type="bool" default="true">
+  Determines whether the security group name (`security_group_name`) is used as a prefix.
+</ParamField>
+
+<ParamField path="security_group_tags" type="map(string)" default="{}">
+  A map of additional tags to add to the security groups created.
+</ParamField>
+
+### Engine security group
+
+<ParamField path="engine_security_group_id" type="string" default="null">
+  The ID of the Amazon EMR Studio Engine security group. The Engine security group allows inbound network traffic from the Workspace security group, and it must be in the same VPC specified by `vpc_id`.
+</ParamField>
+
+<ParamField path="engine_security_group_description" type="string" default='"EMR Studio engine security group"'>
+  Description of the engine security group created.
+</ParamField>
+
+<ParamField path="engine_security_group_ingress_rules" type="map(object)" default="null">
+  Security group ingress rules to add to the engine security group. Each rule accepts `cidr_ipv4`, `cidr_ipv6`, `description`, `from_port`, `to_port`, `ip_protocol`, `prefix_list_id`, `referenced_security_group_id`, `referenced_workspace_security_group_id`, `name`, and `tags`.
+</ParamField>
+
+<ParamField path="engine_security_group_egress_rules" type="map(object)" default='{ "all-traffic" = { description = "Allow all egress traffic", ip_protocol = "-1", cidr_ipv4 = "0.0.0.0/0" } }'>
+  Security group egress rules to add to the engine security group. Each rule accepts the same fields as ingress rules.
+</ParamField>
+
+### Workspace security group
+
+<ParamField path="workspace_security_group_id" type="string" default="null">
+  The ID of the Amazon EMR Studio Workspace security group. The Workspace security group allows outbound network traffic to resources in the Engine security group, and it must be in the same VPC specified by `vpc_id`.
+</ParamField>
+
+<ParamField path="workspace_security_group_description" type="string" default='"EMR Studio workspace security group"'>
+  Description of the workspace security group created.
+</ParamField>
+
+<ParamField path="workspace_security_group_ingress_rules" type="map(object)" default="null">
+  Security group ingress rules to add to the workspace security group. Each rule accepts `cidr_ipv4`, `cidr_ipv6`, `description`, `from_port`, `to_port`, `ip_protocol`, `prefix_list_id`, `referenced_security_group_id`, `referenced_engine_security_group_id`, `name`, and `tags`.
+</ParamField>
+
+<ParamField path="workspace_security_group_egress_rules" type="map(object)" default="null">
+  Security group egress rules to add to the workspace security group. Each rule accepts the same fields as ingress rules.
+</ParamField>
+
+---
+
+## Outputs
+
+### Studio
+
+<ResponseField name="arn" type="string">
+  ARN of the studio.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  The unique access URL of the Amazon EMR Studio.
+</ResponseField>
+
+### Service IAM role
+
+<ResponseField name="service_iam_role_name" type="string">
+  Service IAM role name.
+</ResponseField>
+
+<ResponseField name="service_iam_role_arn" type="string">
+  Service IAM role ARN.
+</ResponseField>
+
+<ResponseField name="service_iam_role_unique_id" type="string">
+  Stable and unique string identifying the service IAM role.
+</ResponseField>
+
+### Service IAM role policy
+
+<ResponseField name="service_iam_role_policy_arn" type="string">
+  Service IAM role policy ARN.
+</ResponseField>
+
+<ResponseField name="service_iam_role_policy_id" type="string">
+  Service IAM role policy ID.
+</ResponseField>
+
+<ResponseField name="service_iam_role_policy_name" type="string">
+  The name of the service role policy.
+</ResponseField>
+
+### User IAM role
+
+<ResponseField name="user_iam_role_name" type="string">
+  User IAM role name.
+</ResponseField>
+
+<ResponseField name="user_iam_role_arn" type="string">
+  User IAM role ARN.
+</ResponseField>
+
+<ResponseField name="user_iam_role_unique_id" type="string">
+  Stable and unique string identifying the user IAM role.
+</ResponseField>
+
+### User IAM role policy
+
+<ResponseField name="user_iam_role_policy_arn" type="string">
+  User IAM role policy ARN.
+</ResponseField>
+
+<ResponseField name="user_iam_role_policy_id" type="string">
+  User IAM role policy ID.
+</ResponseField>
+
+<ResponseField name="user_iam_role_policy_name" type="string">
+  The name of the user role policy.
+</ResponseField>
+
+### Engine security group
+
+<ResponseField name="engine_security_group_arn" type="string">
+  Amazon Resource Name (ARN) of the engine security group.
+</ResponseField>
+
+<ResponseField name="engine_security_group_id" type="string">
+  ID of the engine security group.
+</ResponseField>
+
+### Workspace security group
+
+<ResponseField name="workspace_security_group_arn" type="string">
+  Amazon Resource Name (ARN) of the workspace security group.
+</ResponseField>
+
+<ResponseField name="workspace_security_group_id" type="string">
+  ID of the workspace security group.
+</ResponseField>

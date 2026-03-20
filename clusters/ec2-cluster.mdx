@@ -1,0 +1,361 @@
+---
+title: 'EC2 cluster'
+description: 'Deploy EMR clusters on EC2 instances using instance fleets or instance groups in public or private subnets.'
+keywords: ['emr', 'ec2', 'instance fleet', 'instance group', 'private cluster', 'terraform']
+---
+
+An EC2-based EMR cluster provisions and manages Apache Hadoop and related applications (Spark, Hive, Trino, and others) on EC2 instances that you control. You choose the instance types, define node groups, and configure networking — EMR handles cluster lifecycle, job execution, and autoscaling.
+
+The root module `terraform-aws-modules/emr/aws` creates all EC2 cluster resources including the cluster itself, managed security groups, and IAM roles for the service, autoscaling, and EC2 instance profile.
+
+## Node configuration strategies
+
+You must choose one of two strategies for configuring master, core, and task nodes. You cannot mix strategies within the same cluster.
+
+### Instance fleets
+
+Instance fleets let you specify a list of candidate instance types and a target capacity. EMR provisions a mix of on-demand and Spot Instances to meet the capacity target, using whichever instance types are available.
+
+Use `master_instance_fleet`, `core_instance_fleet`, and `task_instance_fleet` to configure each node type. Each fleet defines `instance_type_configs` (a list of candidate types with optional EBS and bid-price settings), `launch_specifications` (Spot or on-demand strategy), and target capacities.
+
+### Instance groups
+
+Instance groups use a single, fixed instance type per node role. You specify an exact instance count and optionally a bid price for Spot capacity.
+
+Use `master_instance_group`, `core_instance_group`, and `task_instance_group` to configure each node type. Each group requires `instance_type` and optionally `instance_count`, `bid_price`, and `ebs_config`.
+
+<Note>
+Instance groups only support a single subnet (one Availability Zone). Use `ec2_attributes.subnet_id` (singular) for instance group clusters. Instance fleets support multiple subnets — use `ec2_attributes.subnet_ids` (plural) to span multiple AZs.
+</Note>
+
+## Public vs private clusters
+
+The `is_private_cluster` variable (default: `true`) controls whether a service access security group is created for the cluster. Private clusters require an additional security group that allows EMR's cluster manager to communicate with core and task nodes on port 8443.
+
+For public clusters, set `is_private_cluster = false`. The service access security group is not created, and nodes are placed in public subnets with direct internet access. Use S3 and EMR VPC endpoints to avoid data transfer charges across NAT gateways when using private subnets.
+
+<Note>
+All subnets (public or private) must be tagged with `{ "for-use-with-amazon-emr-managed-policies" = true }` to work with the recommended `AmazonEMRServicePolicy_v2` managed policy. Tag your VPC with the same tag so EMR can create security groups when `create_managed_security_groups = false`.
+</Note>
+
+## Key configuration options
+
+| Variable | Description | Default |
+|---|---|---|
+| `release_label` | EMR release version (e.g. `"emr-7.9.0"`) | Latest emr-7.x |
+| `applications` | List of applications to install (e.g. `["spark", "trino"]`) | `[]` |
+| `bootstrap_action` | Ordered list of bootstrap scripts to run before Hadoop starts | `null` |
+| `configurations_json` | JSON string of application configuration overrides | `null` |
+| `ebs_root_volume_size` | Root EBS volume size in GiB for each EC2 instance | `null` |
+| `log_uri` | S3 URI to write cluster log files | `null` |
+| `scale_down_behavior` | How instances terminate on scale-in | `"TERMINATE_AT_TASK_COMPLETION"` |
+| `step_concurrency_level` | Maximum concurrent steps (up to 256; requires EMR 5.28.0+) | `null` |
+| `auto_termination_policy` | Idle timeout in seconds before the cluster auto-terminates | `null` |
+| `is_private_cluster` | Whether the cluster is in a private subnet | `true` |
+
+## ec2_attributes block
+
+The `ec2_attributes` variable configures networking and security settings for the EC2 instances:
+
+| Attribute | Description |
+|---|---|
+| `subnet_id` | Single subnet ID (required for instance groups) |
+| `subnet_ids` | List of subnet IDs (supported by instance fleets) |
+| `key_name` | EC2 key pair name for SSH access |
+| `emr_managed_master_security_group` | Override the managed master security group |
+| `emr_managed_slave_security_group` | Override the managed slave (core/task) security group |
+| `service_access_security_group` | Override the service access security group (private clusters) |
+| `additional_master_security_groups` | Extra security group to attach to master nodes |
+| `additional_slave_security_groups` | Extra security group to attach to core/task nodes |
+| `instance_profile` | Override the EC2 instance profile name |
+
+## Examples
+
+<Tabs>
+  <Tab title="Instance fleet (private)">
+
+```hcl
+module "emr" {
+  source = "terraform-aws-modules/emr/aws"
+
+  name = "example-instance-fleet"
+
+  release_label = "emr-7.9.0"
+  applications  = ["spark", "trino"]
+  auto_termination_policy = {
+    idle_timeout = 3600
+  }
+
+  bootstrap_action = [
+    {
+      path = "file:/bin/echo",
+      name = "Just an example",
+      args = ["Hello World!"]
+    }
+  ]
+
+  configurations_json = jsonencode([
+    {
+      "Classification" : "spark-env",
+      "Configurations" : [
+        {
+          "Classification" : "export",
+          "Properties" : {
+            "JAVA_HOME" : "/usr/lib/jvm/java-1.8.0"
+          }
+        }
+      ],
+      "Properties" : {}
+    }
+  ])
+
+  master_instance_fleet = {
+    name                      = "master-fleet"
+    target_on_demand_capacity = 1
+    instance_type_configs = [
+      {
+        instance_type = "m5.xlarge"
+      }
+    ]
+  }
+
+  core_instance_fleet = {
+    name                      = "core-fleet"
+    target_on_demand_capacity = 2
+    target_spot_capacity      = 2
+    instance_type_configs = [
+      {
+        instance_type     = "c4.large"
+        weighted_capacity = 1
+      },
+      {
+        bid_price_as_percentage_of_on_demand_price = 100
+        ebs_config = [{
+          size                 = 256
+          type                 = "gp3"
+          volumes_per_instance = 1
+        }]
+        instance_type     = "c5.xlarge"
+        weighted_capacity = 2
+      },
+      {
+        bid_price_as_percentage_of_on_demand_price = 100
+        instance_type                              = "c6i.xlarge"
+        weighted_capacity                          = 2
+      }
+    ]
+    launch_specifications = {
+      spot_specification = {
+        allocation_strategy      = "capacity-optimized"
+        block_duration_minutes   = 0
+        timeout_action           = "SWITCH_TO_ON_DEMAND"
+        timeout_duration_minutes = 5
+      }
+    }
+  }
+
+  task_instance_fleet = {
+    name                      = "task-fleet"
+    target_on_demand_capacity = 1
+    target_spot_capacity      = 2
+    instance_type_configs = [
+      {
+        instance_type     = "c4.large"
+        weighted_capacity = 1
+      },
+      {
+        bid_price_as_percentage_of_on_demand_price = 100
+        ebs_config = [{
+          size                 = 256
+          type                 = "gp3"
+          volumes_per_instance = 1
+        }]
+        instance_type     = "c5.xlarge"
+        weighted_capacity = 2
+      }
+    ]
+    launch_specifications = {
+      spot_specification = {
+        allocation_strategy      = "capacity-optimized"
+        block_duration_minutes   = 0
+        timeout_action           = "SWITCH_TO_ON_DEMAND"
+        timeout_duration_minutes = 5
+      }
+    }
+  }
+
+  ebs_root_volume_size = 64
+  ec2_attributes = {
+    # Subnets should be private subnets and tagged with
+    # { "for-use-with-amazon-emr-managed-policies" = true }
+    subnet_ids = ["subnet-abcde012", "subnet-bcde012a", "subnet-fghi345a"]
+  }
+  vpc_id = "vpc-1234556abcdef"
+
+  list_steps_states  = ["PENDING", "RUNNING", "FAILED", "INTERRUPTED"]
+  log_uri            = "s3://my-elasticmapreduce-bucket/"
+
+  scale_down_behavior    = "TERMINATE_AT_TASK_COMPLETION"
+  step_concurrency_level = 3
+  termination_protection = false
+  visible_to_all_users   = true
+
+  tags = {
+    Terraform   = "true"
+    Environment = "dev"
+  }
+}
+```
+
+  </Tab>
+  <Tab title="Instance group (private)">
+
+```hcl
+module "emr" {
+  source = "terraform-aws-modules/emr/aws"
+
+  name = "example-instance-group"
+
+  release_label = "emr-7.9.0"
+  applications  = ["spark", "trino"]
+  auto_termination_policy = {
+    idle_timeout = 3600
+  }
+
+  bootstrap_action = [
+    {
+      name = "Just an example",
+      path = "file:/bin/echo",
+      args = ["Hello World!"]
+    }
+  ]
+
+  configurations_json = jsonencode([
+    {
+      "Classification" : "spark-env",
+      "Configurations" : [
+        {
+          "Classification" : "export",
+          "Properties" : {
+            "JAVA_HOME" : "/usr/lib/jvm/java-1.8.0"
+          }
+        }
+      ],
+      "Properties" : {}
+    }
+  ])
+
+  master_instance_group = {
+    name           = "master-group"
+    instance_count = 1
+    instance_type  = "m5.xlarge"
+  }
+
+  core_instance_group = {
+    name           = "core-group"
+    instance_count = 2
+    instance_type  = "c4.large"
+  }
+
+  task_instance_group = {
+    name           = "task-group"
+    instance_count = 2
+    instance_type  = "c5.xlarge"
+    bid_price      = "0.1"
+
+    ebs_config = [{
+      size                 = 256
+      type                 = "gp3"
+      volumes_per_instance = 1
+    }]
+    ebs_optimized = true
+  }
+
+  ebs_root_volume_size = 64
+  ec2_attributes = {
+    # Instance groups only support one Subnet/AZ
+    # Subnets should be private subnets and tagged with
+    # { "for-use-with-amazon-emr-managed-policies" = true }
+    subnet_id = "subnet-abcde012"
+  }
+  vpc_id = "vpc-1234556abcdef"
+
+  list_steps_states  = ["PENDING", "RUNNING", "FAILED", "INTERRUPTED"]
+  log_uri            = "s3://my-elasticmapreduce-bucket/"
+
+  scale_down_behavior    = "TERMINATE_AT_TASK_COMPLETION"
+  step_concurrency_level = 3
+  termination_protection = false
+  visible_to_all_users   = true
+
+  tags = {
+    Terraform   = "true"
+    Environment = "dev"
+  }
+}
+```
+
+  </Tab>
+</Tabs>
+
+To create a public cluster, add `is_private_cluster = false` and point `ec2_attributes` to public subnets:
+
+```hcl
+  ec2_attributes = {
+    # Subnets should be public subnets and tagged with
+    # { "for-use-with-amazon-emr-managed-policies" = true }
+    subnet_ids = ["subnet-xyzde987", "subnet-slkjf456", "subnet-qeiru789"]
+  }
+
+  # Required for creating public cluster
+  is_private_cluster = false
+```
+
+## Conditional creation
+
+You can toggle individual resources on or off without removing the module call. This is useful when you want to bring your own IAM roles or security groups.
+
+```hcl
+module "emr" {
+  source = "terraform-aws-modules/emr/aws"
+
+  # Disables all resources from being created
+  create = false
+
+  # Enables the creation of a security configuration for the cluster
+  # Configuration should be supplied via the `security_configuration` variable
+  create_security_configuration = true
+
+  # Disables the creation of the role used by the service
+  # An externally created role must be supplied via the `service_iam_role_arn` variable
+  create_service_iam_role = false
+
+  # Disables the creation of the role used by the service
+  # An externally created role can be supplied via the `autoscaling_iam_role_arn` variable
+  create_autoscaling_iam_role = false
+
+  # Disables the creation of the IAM role/instance profile used by the EC2 instances
+  # An externally created IAM instance profile must be supplied
+  # via the `iam_instance_profile_name` variable
+  create_iam_instance_profile = false
+
+  # Disables the creation of the security groups used by the EC2 instances. Users can supplied
+  # security groups for `master`, `slave`, and `service` security groups via the
+  # `ec2_attributes` map variable. If not, the EMR service will create and associate
+  # the necessary security groups. Note - the VPC will need to be tagged with
+  # { "for-use-with-amazon-emr-managed-policies" = true } for EMR to create security groups
+  # https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-man-sec-groups.html
+  create_managed_security_groups = false
+
+  is_private_cluster = false
+}
+```
+
+| Variable | Description | Default |
+|---|---|---|
+| `create` | Master toggle — disables all resource creation | `true` |
+| `create_service_iam_role` | Create the EMR service IAM role | `true` |
+| `create_autoscaling_iam_role` | Create the autoscaling IAM role | `true` |
+| `create_iam_instance_profile` | Create the EC2 IAM role and instance profile | `true` |
+| `create_managed_security_groups` | Create managed master, slave, and service security groups | `true` |
+| `create_security_configuration` | Create an EMR security configuration | `false` |

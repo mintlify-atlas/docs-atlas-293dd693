@@ -1,0 +1,185 @@
+---
+title: "Serverless cluster"
+description: "Deploy an EMR Serverless application for Spark or Hive without managing EC2 instances."
+---
+
+EMR Serverless runs your analytics workloads without you provisioning or managing EC2 clusters. You define an application (Spark or Hive), optionally pre-initialize workers for faster startup, and submit jobs against the application ARN.
+
+The serverless submodule is at `modules/serverless`. Source it as `terraform-aws-modules/emr/aws//modules/serverless`.
+
+## Configuration
+
+<Tabs>
+  <Tab title="Spark">
+    This example pre-initializes two Driver workers and two Executor workers so that the first job starts quickly. It also caps total resource consumption and enables the Livy endpoint and EMR Studio connectivity.
+
+    ```hcl
+    module "emr_serverless_spark" {
+      source = "terraform-aws-modules/emr/aws//modules/serverless"
+
+      name = "example-spark"
+
+      release_label_filters = {
+        emr7 = {
+          prefix = "emr-7"
+        }
+      }
+
+      initial_capacity = {
+        driver = {
+          initial_capacity_type = "Driver"
+
+          initial_capacity_config = {
+            worker_count = 2
+            worker_configuration = {
+              cpu    = "4 vCPU"
+              memory = "12 GB"
+            }
+          }
+        }
+
+        executor = {
+          initial_capacity_type = "Executor"
+
+          initial_capacity_config = {
+            worker_count = 2
+            worker_configuration = {
+              cpu    = "8 vCPU"
+              disk   = "64 GB"
+              memory = "24 GB"
+            }
+          }
+        }
+      }
+
+      maximum_capacity = {
+        cpu    = "48 vCPU"
+        memory = "144 GB"
+      }
+
+      network_configuration = {
+        subnet_ids = module.vpc.private_subnets
+      }
+
+      interactive_configuration = {
+        livy_endpoint_enabled = true
+        studio_enabled        = true
+      }
+
+      tags = local.tags
+    }
+    ```
+  </Tab>
+  <Tab title="Hive">
+    For Hive applications, set `type = "hive"`. The worker types change to `HiveDriver` and `TezTask` to match the Hive execution engine.
+
+    ```hcl
+    module "emr_serverless_hive" {
+      source = "terraform-aws-modules/emr/aws//modules/serverless"
+
+      name = "example-hive"
+
+      release_label_filters = {
+        emr7 = {
+          prefix = "emr-7"
+        }
+      }
+
+      type = "hive"
+
+      initial_capacity = {
+        driver = {
+          initial_capacity_type = "HiveDriver"
+
+          initial_capacity_config = {
+            worker_count = 2
+            worker_configuration = {
+              cpu    = "2 vCPU"
+              memory = "6 GB"
+            }
+          }
+        }
+
+        task = {
+          initial_capacity_type = "TezTask"
+
+          initial_capacity_config = {
+            worker_count = 2
+            worker_configuration = {
+              cpu    = "4 vCPU"
+              disk   = "32 GB"
+              memory = "12 GB"
+            }
+          }
+        }
+      }
+
+      maximum_capacity = {
+        cpu    = "24 vCPU"
+        memory = "72 GB"
+      }
+
+      tags = local.tags
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Network configuration
+
+To connect your serverless application to resources inside a VPC (for example, an RDS database or a private S3 endpoint), supply private subnet IDs through `network_configuration`. When you do this, EMR Serverless creates an elastic network interface in each subnet:
+
+```hcl
+network_configuration = {
+  subnet_ids = module.vpc.private_subnets
+}
+```
+
+<Note>
+When `network_configuration` is set, your subnets must have outbound internet access (via NAT gateway) or the relevant VPC endpoints so that EMR can reach the EMR control plane and S3.
+</Note>
+
+## Initial capacity
+
+Pre-initialized workers reduce cold-start latency for the first job after the application starts. Workers are billed from the moment the application starts even if no jobs are running, so size them according to your latency requirements versus cost tolerance.
+
+| Field | Description |
+|---|---|
+| `initial_capacity_type` | Worker role: `Driver` / `Executor` for Spark; `HiveDriver` / `TezTask` for Hive |
+| `worker_count` | Number of workers to keep pre-initialized |
+| `cpu` | vCPU allocation per worker (for example, `"4 vCPU"`) |
+| `memory` | Memory allocation per worker (for example, `"12 GB"`) |
+| `disk` | Optional disk allocation per worker (for example, `"64 GB"`) |
+
+## Maximum capacity
+
+Use `maximum_capacity` to cap the total resources the application can consume across all running jobs. Jobs that would exceed the cap are queued until capacity is available.
+
+```hcl
+maximum_capacity = {
+  cpu    = "48 vCPU"
+  memory = "144 GB"
+  # disk = "200 GB"  # optional
+}
+```
+
+## Supporting resources
+
+The full working example at `examples/serverless-cluster/main.tf` provisions a VPC with private subnets and a NAT gateway:
+
+```hcl
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 6.0"
+
+  name = local.name
+  cidr = "10.0.0.0/16"
+
+  azs             = local.azs
+  public_subnets  = [for k, v in local.azs : cidrsubnet("10.0.0.0/16", 8, k)]
+  private_subnets = [for k, v in local.azs : cidrsubnet("10.0.0.0/16", 8, k + 10)]
+
+  enable_nat_gateway = true
+  single_nat_gateway = true
+}
+```

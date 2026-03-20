@@ -1,0 +1,128 @@
+---
+title: Scaling
+description: Configure managed scaling policies, auto-termination, scale-down behavior, and step concurrency for your EMR cluster.
+---
+
+The module provides several independent controls for cluster scaling and lifecycle management. You can use managed scaling to automatically right-size capacity, auto-termination to shut down idle clusters, and step concurrency to parallelize workloads.
+
+## Managed scaling policy
+
+EMR Managed Scaling automatically adjusts the number of instances in your cluster based on workload demand. Set the `managed_scaling_policy` variable to enable it.
+
+<ParamField path="managed_scaling_policy" type="object" optional>
+  When set, the module creates an `aws_emr_managed_scaling_policy` resource attached to the cluster.
+</ParamField>
+
+<ParamField path="managed_scaling_policy.minimum_capacity_units" type="number" required>
+  Minimum number of capacity units the cluster can scale down to. The unit is determined by `unit_type`.
+</ParamField>
+
+<ParamField path="managed_scaling_policy.maximum_capacity_units" type="number" required>
+  Maximum total capacity units the cluster can scale up to.
+</ParamField>
+
+<ParamField path="managed_scaling_policy.maximum_core_capacity_units" type="number" optional>
+  Maximum capacity units allowed for core nodes only. Must be less than or equal to `maximum_capacity_units`.
+</ParamField>
+
+<ParamField path="managed_scaling_policy.maximum_ondemand_capacity_units" type="number" optional>
+  Maximum capacity units that can be On-Demand instances. Useful for capping spend while allowing Spot to fill the rest.
+</ParamField>
+
+<ParamField path="managed_scaling_policy.unit_type" type="string" required>
+  Unit of capacity measurement. Valid values:
+
+  - `"Instances"` — each EC2 instance counts as one unit.
+  - `"VCPU"` — capacity is measured in vCPUs.
+  - `"InstanceFleetUnits"` — capacity is measured in instance fleet weighted units.
+</ParamField>
+
+<ParamField path="managed_scaling_policy.scaling_strategy" type="string" optional>
+  Strategy for scaling out. Controls how EMR prioritizes adding On-Demand vs Spot instances when scaling up.
+</ParamField>
+
+<ParamField path="managed_scaling_policy.utilization_performance_index" type="number" optional>
+  Target utilization percentage (0–100) that EMR uses when computing scale-out decisions. A lower value causes more aggressive scaling.
+</ParamField>
+
+### Example
+
+```hcl
+module "emr" {
+  source = "terraform-aws-modules/emr/aws"
+
+  # ...
+
+  managed_scaling_policy = {
+    minimum_capacity_units          = 2
+    maximum_capacity_units          = 20
+    maximum_core_capacity_units     = 10
+    maximum_ondemand_capacity_units = 5
+    unit_type                       = "Instances"
+    scaling_strategy                = "DEFAULT"
+    utilization_performance_index   = 80
+  }
+}
+```
+
+## Auto-termination policy
+
+Auto-termination shuts the cluster down after it has been idle for a configurable period. This is useful for transient clusters that process a batch of work and then sit idle.
+
+<ParamField path="auto_termination_policy" type="object" optional>
+  When set, the module configures an auto-termination policy on the cluster.
+</ParamField>
+
+<ParamField path="auto_termination_policy.idle_timeout" type="number" optional>
+  Number of seconds the cluster can be idle before EMR terminates it automatically. The minimum is `60`.
+</ParamField>
+
+```hcl
+auto_termination_policy = {
+  idle_timeout = 3600 # terminate after 1 hour of inactivity
+}
+```
+
+## Scale-down behavior
+
+<ParamField path="scale_down_behavior" type="string" default="TERMINATE_AT_TASK_COMPLETION">
+  Controls how EC2 instances are terminated during a scale-in event or instance group resize.
+
+  - `"TERMINATE_AT_TASK_COMPLETION"` — waits for in-progress tasks to complete before terminating the instance. This reduces job failures at the cost of slower scale-in.
+  - `"TERMINATE_AT_INSTANCE_HOUR"` — terminates instances at the next full instance-hour boundary, which can reduce EC2 costs for On-Demand instances.
+</ParamField>
+
+```hcl
+scale_down_behavior = "TERMINATE_AT_TASK_COMPLETION"
+```
+
+## Step concurrency
+
+<ParamField path="step_concurrency_level" type="number" optional>
+  Number of steps that EMR executes concurrently. Valid range: `1`–`256`. Defaults to `1` when not set.
+
+  Requires EMR release `5.28.0` or later.
+</ParamField>
+
+<Tip>
+  Increasing `step_concurrency_level` lets you submit multiple jobs to a single cluster and have them run in parallel, reducing the overhead of provisioning separate clusters per job.
+</Tip>
+
+```hcl
+step_concurrency_level = 3
+```
+
+## Cluster lifecycle flags
+
+<ParamField path="keep_job_flow_alive_when_no_steps" type="bool" optional>
+  When `true` (the EMR default), the cluster stays running after all steps complete. Set to `false` to automatically terminate the cluster when the step queue is empty.
+</ParamField>
+
+<ParamField path="unhealthy_node_replacement" type="bool" default="true">
+  When `true`, EMR gracefully replaces core nodes that have degraded within the cluster rather than leaving them in a degraded state.
+</ParamField>
+
+```hcl
+keep_job_flow_alive_when_no_steps = true
+unhealthy_node_replacement        = true
+```

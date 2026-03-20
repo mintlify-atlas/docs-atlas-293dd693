@@ -1,80 +1,217 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Deploy a private AWS EMR cluster with instance fleet in minutes using Terraform.'
 ---
 
-## Get started in three steps
+This guide walks you through deploying a private EMR cluster with Spark and Trino using instance fleets. You'll have a running cluster at the end.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you start, make sure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+- **AWS credentials** configured locally (e.g., via `aws configure` or environment variables)
+- **Terraform >= 1.5.7** installed ([install guide](https://developer.hashicorp.com/terraform/install))
+- A **VPC** with at least one private subnet
+- The VPC and subnets tagged with `for-use-with-amazon-emr-managed-policies = true`
+- An **S3 bucket** for cluster logs
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  EMR's `AmazonEMRServicePolicy_v2` managed policy requires the `for-use-with-amazon-emr-managed-policies = true` tag on your VPC and subnets. The module tags its own resources automatically, but you must tag your VPC resources manually before applying.
 </Note>
+
+## Deploy a private cluster
+
+<Steps>
+  <Step title="Create your Terraform configuration">
+    Create a file named `main.tf` and add the following configuration. Replace the placeholder values for `subnet_ids`, `vpc_id`, and `log_uri` with your own.
+
+    ```hcl
+    module "emr" {
+      source = "terraform-aws-modules/emr/aws"
+
+      name = "example-instance-fleet"
+
+      release_label = "emr-7.9.0"
+      applications  = ["spark", "trino"]
+      auto_termination_policy = {
+        idle_timeout = 3600
+      }
+
+      bootstrap_action = [
+        {
+          path = "file:/bin/echo",
+          name = "Just an example",
+          args = ["Hello World!"]
+        }
+      ]
+
+      configurations_json = jsonencode([
+        {
+          "Classification" : "spark-env",
+          "Configurations" : [
+            {
+              "Classification" : "export",
+              "Properties" : {
+                "JAVA_HOME" : "/usr/lib/jvm/java-1.8.0"
+              }
+            }
+          ],
+          "Properties" : {}
+        }
+      ])
+
+      master_instance_fleet = {
+        name                      = "master-fleet"
+        target_on_demand_capacity = 1
+        instance_type_configs = [
+          {
+            instance_type = "m5.xlarge"
+          }
+        ]
+      }
+
+      core_instance_fleet = {
+        name                      = "core-fleet"
+        target_on_demand_capacity = 2
+        target_spot_capacity      = 2
+        instance_type_configs = [
+          {
+            instance_type     = "c4.large"
+            weighted_capacity = 1
+          },
+          {
+            bid_price_as_percentage_of_on_demand_price = 100
+            ebs_config = [{
+              size                 = 256
+              type                 = "gp3"
+              volumes_per_instance = 1
+            }]
+            instance_type     = "c5.xlarge"
+            weighted_capacity = 2
+          },
+          {
+            bid_price_as_percentage_of_on_demand_price = 100
+            instance_type                              = "c6i.xlarge"
+            weighted_capacity                          = 2
+          }
+        ]
+        launch_specifications = {
+          spot_specification = {
+            allocation_strategy      = "capacity-optimized"
+            block_duration_minutes   = 0
+            timeout_action           = "SWITCH_TO_ON_DEMAND"
+            timeout_duration_minutes = 5
+          }
+        }
+      }
+
+      task_instance_fleet = {
+        name                      = "task-fleet"
+        target_on_demand_capacity = 1
+        target_spot_capacity      = 2
+        instance_type_configs = [
+          {
+            instance_type     = "c4.large"
+            weighted_capacity = 1
+          },
+          {
+            bid_price_as_percentage_of_on_demand_price = 100
+            ebs_config = [{
+              size                 = 256
+              type                 = "gp3"
+              volumes_per_instance = 1
+            }]
+            instance_type     = "c5.xlarge"
+            weighted_capacity = 2
+          }
+        ]
+        launch_specifications = {
+          spot_specification = {
+            allocation_strategy      = "capacity-optimized"
+            block_duration_minutes   = 0
+            timeout_action           = "SWITCH_TO_ON_DEMAND"
+            timeout_duration_minutes = 5
+          }
+        }
+      }
+
+      ebs_root_volume_size = 64
+      ec2_attributes = {
+        # Subnets should be private subnets and tagged with
+        # { "for-use-with-amazon-emr-managed-policies" = true }
+        subnet_ids = ["subnet-abcde012", "subnet-bcde012a", "subnet-fghi345a"]
+      }
+      vpc_id = "vpc-1234556abcdef"
+
+      list_steps_states  = ["PENDING", "RUNNING", "FAILED", "INTERRUPTED"]
+      log_uri            = "s3://my-elasticmapreduce-bucket/"
+
+      scale_down_behavior    = "TERMINATE_AT_TASK_COMPLETION"
+      step_concurrency_level = 3
+      termination_protection = false
+      visible_to_all_users   = true
+
+      tags = {
+        Terraform   = "true"
+        Environment = "dev"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Initialise Terraform">
+    Run the following command to download the module and its dependencies:
+
+    ```bash
+    terraform init
+    ```
+  </Step>
+
+  <Step title="Review the plan">
+    Preview the resources Terraform will create before applying:
+
+    ```bash
+    terraform plan
+    ```
+
+    Expect to see resources for the EMR cluster, security groups (master, slave, service), and IAM roles.
+  </Step>
+
+  <Step title="Apply the configuration">
+    Create the cluster:
+
+    ```bash
+    terraform apply
+    ```
+
+    Cluster provisioning typically takes 5–10 minutes. Terraform will print the outputs once complete.
+  </Step>
+</Steps>
+
+## Key variables
+
+| Variable | Description |
+|----------|-------------|
+| `name` | Name of the EMR job flow. Used as a prefix for all created resources. |
+| `release_label` | The EMR release version (e.g., `emr-7.9.0`). Determines which application versions are available. |
+| `applications` | Case-insensitive list of applications to install, such as `spark` or `trino`. |
+| `ec2_attributes` | EC2 instance configuration including `subnet_ids` (instance fleets) or `subnet_id` (instance groups) and optional security group overrides. |
+| `vpc_id` | The VPC where the module creates managed security groups. |
+| `is_private_cluster` | Set to `true` (default) for private subnets. Set to `false` for public subnets — also requires updating `ec2_attributes.subnet_ids`. |
+
+## Expected outputs
+
+After a successful `terraform apply`, the following outputs are available:
+
+| Output | Description |
+|--------|-------------|
+| `cluster_id` | The ID of the EMR cluster. |
+| `cluster_arn` | The ARN of the EMR cluster. |
+| `cluster_master_public_dns` | The DNS name of the master node. Returns the private DNS name for clusters in private subnets. |
+
+Access outputs in your shell:
+
+```bash
+terraform output cluster_id
+terraform output cluster_master_public_dns
+```

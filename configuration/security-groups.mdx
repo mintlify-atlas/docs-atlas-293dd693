@@ -1,0 +1,176 @@
+---
+title: Security groups
+description: Configure the managed security groups that control traffic between EMR nodes and the EMR service.
+---
+
+The module can create and manage three security groups for your cluster:
+
+| Security group | Variable suffix | Purpose |
+|---|---|---|
+| Master | `-master` | Controls traffic to and from master nodes |
+| Slave | `-slave` | Controls traffic to and from core and task nodes |
+| Service | `-service` | Enables the EMR service to communicate with nodes in private clusters |
+
+All three groups are tagged with `{ "for-use-with-amazon-emr-managed-policies" = true }` so that the `AmazonEMRServicePolicy_v2` managed policy can manage their rules.
+
+<Note>
+  If you set `create_managed_security_groups = false` and do not supply security group IDs via `ec2_attributes`, EMR will attempt to create its own default security groups. For this to work, your VPC must be tagged with `{ "for-use-with-amazon-emr-managed-policies" = true }`. See the [AWS managed security groups documentation](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-man-sec-groups.html) for details.
+</Note>
+
+## Enabling and naming
+
+<ParamField path="create_managed_security_groups" type="bool" default="true">
+  Set to `false` to skip creation of all three managed security groups.
+</ParamField>
+
+<ParamField path="managed_security_group_name" type="string" optional>
+  Base name for the security groups. The module appends `-master`, `-slave`, and `-service` to this value. Defaults to the cluster `name`.
+</ParamField>
+
+<ParamField path="managed_security_group_use_name_prefix" type="bool" default="true">
+  When `true`, the security group name is used as a prefix and AWS appends a unique suffix.
+</ParamField>
+
+<ParamField path="managed_security_group_tags" type="map(string)" default="{}">
+  Additional tags to merge onto all three security groups.
+</ParamField>
+
+<ParamField path="vpc_id" type="string" required>
+  ID of the VPC in which to create the security groups.
+</ParamField>
+
+## Master security group rules
+
+<ParamField path="master_security_group_ingress_rules" type="map(object)" optional>
+  Map of ingress rules to add to the master security group. Each rule object supports:
+
+  - `cidr_ipv4` — Source IPv4 CIDR block.
+  - `cidr_ipv6` — Source IPv6 CIDR block.
+  - `description` — Human-readable description.
+  - `from_port` — Start of port range.
+  - `to_port` — End of port range. Defaults to `from_port` when omitted.
+  - `ip_protocol` — Protocol. Default: `"tcp"`. Use `"-1"` for all traffic.
+  - `prefix_list_id` — ID of a managed prefix list.
+  - `referenced_security_group_id` — ID of a security group to reference as the source.
+  - `reference_slave_security_group` — When `true`, the slave security group is automatically used as the source. Default: `false`.
+  - `tags` — Rule-level tags.
+</ParamField>
+
+<ParamField path="master_security_group_egress_rules" type="map(object)" default="allow all outbound on 0.0.0.0/0">
+  Map of egress rules to add to the master security group. Accepts the same fields as `master_security_group_ingress_rules`, with `reference_slave_security_group` substituted for cross-group references.
+
+  The default rule allows all outbound traffic:
+
+  ```hcl
+  master_security_group_egress_rules = {
+    "all-traffic" = {
+      description = "Allow all egress traffic"
+      ip_protocol = "-1"
+      cidr_ipv4   = "0.0.0.0/0"
+    }
+  }
+  ```
+</ParamField>
+
+## Slave security group rules
+
+The slave security group is shared by both core and task nodes.
+
+<ParamField path="slave_security_group_ingress_rules" type="map(object)" optional>
+  Map of ingress rules for the slave security group. Accepts the same fields as the master rules, with `reference_master_security_group` available to reference the master group as the source.
+</ParamField>
+
+<ParamField path="slave_security_group_egress_rules" type="map(object)" default="allow all outbound on 0.0.0.0/0">
+  Map of egress rules for the slave security group. The default allows all outbound traffic:
+
+  ```hcl
+  slave_security_group_egress_rules = {
+    "all-traffic" = {
+      description = "Allow all egress traffic"
+      ip_protocol = "-1"
+      cidr_ipv4   = "0.0.0.0/0"
+    }
+  }
+  ```
+</ParamField>
+
+## Service security group rules
+
+The service security group is only created for private clusters (`is_private_cluster = true`). It allows the EMR cluster manager to reach nodes over port `8443` and accepts inbound connections from master nodes on port `9443`.
+
+These built-in rules are always present when the service group is created. You can add more rules on top of them:
+
+<ParamField path="service_security_group_ingress_rules" type="map(object)" optional>
+  Additional ingress rules for the service security group. Supports `reference_master_security_group` for cross-group rules.
+</ParamField>
+
+<ParamField path="service_security_group_egress_rules" type="map(object)" default="allow all outbound on 0.0.0.0/0">
+  Additional egress rules for the service security group. The module always adds port-`8443` egress rules to the master and slave groups; this variable adds further rules on top.
+</ParamField>
+
+## Private vs public clusters
+
+<ParamField path="is_private_cluster" type="bool" default="true">
+  Set to `false` for clusters deployed in public subnets. When `false`, the service security group is not created because public clusters do not require the EMR service access path.
+</ParamField>
+
+For a public cluster, omit the service group and set `is_private_cluster = false`:
+
+```hcl
+module "emr" {
+  source = "terraform-aws-modules/emr/aws"
+
+  # ...
+
+  ec2_attributes = {
+    # Subnets should be public subnets and tagged with
+    # { "for-use-with-amazon-emr-managed-policies" = true }
+    subnet_ids = ["subnet-xyzde987", "subnet-slkjf456", "subnet-qeiru789"]
+  }
+
+  # Required for creating public cluster
+  is_private_cluster = false
+}
+```
+
+## Cross-group rules
+
+Both `reference_slave_security_group` and `reference_master_security_group` are convenience booleans that let you reference the sibling security group without knowing its ID ahead of time. The module resolves the actual security group ID at apply time.
+
+```hcl
+master_security_group_ingress_rules = {
+  allow_from_slave = {
+    description                    = "Allow all traffic from slave nodes"
+    ip_protocol                    = "-1"
+    reference_slave_security_group = true
+  }
+}
+
+slave_security_group_ingress_rules = {
+  allow_from_master = {
+    description                     = "Allow all traffic from master node"
+    ip_protocol                     = "-1"
+    reference_master_security_group = true
+  }
+}
+```
+
+## Disabling managed security groups
+
+To manage security groups outside of this module, disable creation and supply the IDs via `ec2_attributes`:
+
+```hcl
+module "emr" {
+  source = "terraform-aws-modules/emr/aws"
+
+  create_managed_security_groups = false
+  is_private_cluster             = false
+
+  ec2_attributes = {
+    emr_managed_master_security_group = "sg-master1234"
+    emr_managed_slave_security_group  = "sg-slave5678"
+    # For private clusters also set:
+    # service_access_security_group = "sg-service9012"
+  }
+}
+```

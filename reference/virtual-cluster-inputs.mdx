@@ -1,0 +1,163 @@
+---
+title: 'Virtual cluster submodule'
+description: 'Input and output reference for the EMR on EKS virtual cluster submodule.'
+sidebarTitle: 'Virtual cluster'
+---
+
+## Inputs
+
+### General
+
+<ParamField path="create" type="bool" default="true">
+  Controls if resources should be created (affects nearly all resources).
+</ParamField>
+
+<ParamField path="region" type="string" default="null">
+  Region where the resource(s) will be managed. Defaults to the Region set in the provider configuration.
+</ParamField>
+
+<ParamField path="tags" type="map(string)" default="{}">
+  A map of tags to add to all resources.
+</ParamField>
+
+<ParamField path="labels" type="map(string)" default="{}">
+  A map of labels to add to all Kubernetes resources.
+</ParamField>
+
+<ParamField path="annotations" type="map(string)" default="{}">
+  A map of annotations to add to all Kubernetes resources.
+</ParamField>
+
+### EMR virtual cluster
+
+<ParamField path="name" type="string" default='""'>
+  Name of the EMR on EKS virtual cluster.
+</ParamField>
+
+<ParamField path="eks_cluster_name" type="string" default='""'>
+  EKS cluster name.
+</ParamField>
+
+### Kubernetes namespace and role
+
+<ParamField path="create_namespace" type="bool" default="true">
+  Determines whether a Kubernetes namespace is created for EMR on EKS.
+</ParamField>
+
+<ParamField path="namespace" type="string" default='"emr-containers"'>
+  Kubernetes namespace for EMR on EKS.
+</ParamField>
+
+<ParamField path="create_kubernetes_role" type="bool" default="true">
+  Determines whether a Kubernetes role is created for EMR on EKS.
+</ParamField>
+
+### Job execution role
+
+<ParamField path="create_iam_role" type="bool" default="true">
+  Determines whether an IAM role is created for EMR on EKS job execution role.
+</ParamField>
+
+<ParamField path="eks_oidc_provider_arn" type="string" default='""'>
+  OIDC provider ARN for the EKS cluster.
+</ParamField>
+
+<ParamField path="s3_bucket_arns" type="list(string)" default="[]">
+  S3 bucket ARNs for the EMR on EKS job execution role to list, get objects, and put objects.
+</ParamField>
+
+<ParamField path="role_name" type="string" default="null">
+  Name to use on the IAM role created for EMR on EKS job execution role as well as Kubernetes RBAC role.
+</ParamField>
+
+<ParamField path="iam_role_use_name_prefix" type="bool" default="true">
+  Determines whether the IAM job execution role name (`role_name`) is used as a prefix.
+</ParamField>
+
+<ParamField path="iam_role_path" type="string" default="null">
+  Job execution IAM role path.
+</ParamField>
+
+<ParamField path="iam_role_description" type="string" default="null">
+  Description of the job execution role.
+</ParamField>
+
+<ParamField path="iam_role_permissions_boundary" type="string" default="null">
+  ARN of the policy that is used to set the permissions boundary for the job execution IAM role.
+</ParamField>
+
+<ParamField path="iam_role_additional_policies" type="map(string)" default="{}">
+  Additional policies to be added to the job execution IAM role.
+</ParamField>
+
+### CloudWatch log group
+
+<ParamField path="create_cloudwatch_log_group" type="bool" default="true">
+  Determines whether a log group is created by this module for the cluster logs. If not, AWS will automatically create one if logging is enabled.
+</ParamField>
+
+<ParamField path="cloudwatch_log_group_arn" type="string" default='"arn:aws:logs:*:*:*"'>
+  ARN of the log group to use for the cluster logs.
+</ParamField>
+
+<ParamField path="cloudwatch_log_group_retention_in_days" type="number" default="7">
+  Number of days to retain log events.
+</ParamField>
+
+<ParamField path="cloudwatch_log_group_kms_key_id" type="string" default="null">
+  If a KMS Key ARN is set, this key will be used to encrypt the corresponding log group. Please be sure that the KMS Key has an appropriate key policy.
+</ParamField>
+
+<ParamField path="cloudwatch_log_group_class" type="string" default="null">
+  Specified the log class of the log group. Possible values are: `STANDARD` or `INFREQUENT_ACCESS`.
+</ParamField>
+
+<ParamField path="cloudwatch_log_group_name" type="string" default="null">
+  The name of the log group. If a name is not provided, the default name format used is: `/emr-on-eks-logs/emr-workload/<NAMESPACE>`.
+</ParamField>
+
+<ParamField path="cloudwatch_log_group_use_name_prefix" type="bool" default="false">
+  Determines whether the log group name (`cloudwatch_log_group_name`) is used as a prefix.
+</ParamField>
+
+<ParamField path="cloudwatch_log_group_skip_destroy" type="bool" default="null">
+  Set to `true` if you do not wish the log group (and any logs it may contain) to be deleted at destroy time, and instead just remove the log group from the Terraform state.
+</ParamField>
+
+---
+
+## Outputs
+
+### EMR virtual cluster
+
+<ResponseField name="virtual_cluster_arn" type="string">
+  ARN of the EMR virtual cluster.
+</ResponseField>
+
+<ResponseField name="virtual_cluster_id" type="string">
+  ID of the EMR virtual cluster.
+</ResponseField>
+
+### Job execution role
+
+<ResponseField name="job_execution_role_name" type="string">
+  IAM role name of the job execution role.
+</ResponseField>
+
+<ResponseField name="job_execution_role_arn" type="string">
+  IAM role ARN of the job execution role.
+</ResponseField>
+
+<ResponseField name="job_execution_role_unique_id" type="string">
+  Stable and unique string identifying the job execution IAM role.
+</ResponseField>
+
+### CloudWatch log group
+
+<ResponseField name="cloudwatch_log_group_name" type="string">
+  Name of the CloudWatch log group created.
+</ResponseField>
+
+<ResponseField name="cloudwatch_log_group_arn" type="string">
+  ARN of the CloudWatch log group created.
+</ResponseField>

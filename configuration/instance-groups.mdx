@@ -1,0 +1,237 @@
+---
+title: Instance groups
+description: Configure EMR instance groups for fixed-size node pools with straightforward per-instance-type configuration.
+---
+
+Instance groups provision a fixed number of identical EC2 instances for each node role. They offer a simpler configuration model than instance fleets and are a good choice when your workload requires predictable, steady-state capacity.
+
+<Warning>
+  Instance groups and instance fleets are mutually exclusive. Setting any `*_instance_group` variable will conflict with the corresponding `*_instance_fleet` variable on the same cluster.
+</Warning>
+
+<Note>
+  Instance groups only support a single subnet and Availability Zone. Use `ec2_attributes.subnet_id` (not `subnet_ids`) when configuring an instance-group cluster.
+</Note>
+
+## Group types
+
+The module exposes three group variables, one per node role:
+
+| Variable | Node role | Resource |
+|---|---|---|
+| `master_instance_group` | Master | Inline in `aws_emr_cluster` |
+| `core_instance_group` | Core | Inline in `aws_emr_cluster` |
+| `task_instance_group` | Task | Separate `aws_emr_instance_group` resource |
+
+<Accordion title="master_instance_group">
+
+The master group controls the primary node that coordinates the cluster.
+
+<ParamField path="master_instance_group.instance_type" type="string" required>
+  EC2 instance type for the master node, for example `"m5.xlarge"`.
+</ParamField>
+
+<ParamField path="master_instance_group.instance_count" type="number" optional>
+  Number of master instances to launch. Use `3` for high-availability master configurations.
+</ParamField>
+
+<ParamField path="master_instance_group.name" type="string" optional>
+  Display name for the group.
+</ParamField>
+
+<ParamField path="master_instance_group.bid_price" type="string" optional>
+  Maximum Spot price in USD per instance-hour. When set, EMR launches master nodes as Spot instances.
+</ParamField>
+
+<ParamField path="master_instance_group.ebs_config" type="list(object)" optional>
+  EBS volumes to attach. See [EBS config](#ebs-config) for nested attributes.
+</ParamField>
+
+```hcl
+master_instance_group = {
+  name           = "master-group"
+  instance_count = 1
+  instance_type  = "m5.xlarge"
+}
+```
+
+</Accordion>
+
+<Accordion title="core_instance_group">
+
+The core group stores data in HDFS and runs compute tasks.
+
+<ParamField path="core_instance_group.instance_type" type="string" required>
+  EC2 instance type for core nodes.
+</ParamField>
+
+<ParamField path="core_instance_group.instance_count" type="number" optional>
+  Number of core instances to launch.
+</ParamField>
+
+<ParamField path="core_instance_group.name" type="string" optional>
+  Display name for the group.
+</ParamField>
+
+<ParamField path="core_instance_group.bid_price" type="string" optional>
+  Maximum Spot price in USD per instance-hour.
+</ParamField>
+
+<ParamField path="core_instance_group.autoscaling_policy" type="string" optional>
+  JSON string containing an EMR autoscaling policy document. When provided, EMR uses this policy to automatically scale the core group.
+</ParamField>
+
+<ParamField path="core_instance_group.ebs_config" type="list(object)" optional>
+  EBS volumes to attach. See [EBS config](#ebs-config) for nested attributes.
+</ParamField>
+
+```hcl
+core_instance_group = {
+  name           = "core-group"
+  instance_count = 2
+  instance_type  = "c4.large"
+}
+```
+
+</Accordion>
+
+<Accordion title="task_instance_group">
+
+The task group adds compute-only capacity. Task nodes do not store HDFS data.
+
+<ParamField path="task_instance_group.instance_type" type="string" required>
+  EC2 instance type for task nodes.
+</ParamField>
+
+<ParamField path="task_instance_group.instance_count" type="number" optional>
+  Number of task instances to launch.
+</ParamField>
+
+<ParamField path="task_instance_group.name" type="string" optional>
+  Display name for the group.
+</ParamField>
+
+<ParamField path="task_instance_group.bid_price" type="string" optional>
+  Maximum Spot price in USD per instance-hour. Task nodes are good candidates for Spot because they hold no HDFS data.
+</ParamField>
+
+<ParamField path="task_instance_group.autoscaling_policy" type="string" optional>
+  JSON string containing an EMR autoscaling policy document.
+</ParamField>
+
+<ParamField path="task_instance_group.configurations_json" type="string" optional>
+  JSON string for per-group application configuration overrides.
+</ParamField>
+
+<ParamField path="task_instance_group.ebs_config" type="list(object)" optional>
+  EBS volumes to attach. See [EBS config](#ebs-config) for nested attributes.
+</ParamField>
+
+<ParamField path="task_instance_group.ebs_optimized" type="bool" default="true">
+  Whether EBS optimization is enabled for the instance type. Defaults to `true`.
+</ParamField>
+
+```hcl
+task_instance_group = {
+  name           = "task-group"
+  instance_count = 2
+  instance_type  = "c5.xlarge"
+  bid_price      = "0.1"
+
+  ebs_config = [{
+    size                 = 256
+    type                 = "gp3"
+    volumes_per_instance = 1
+  }]
+  ebs_optimized = true
+}
+```
+
+</Accordion>
+
+## EBS config
+
+All three group types accept an `ebs_config` list to attach additional EBS volumes to each instance.
+
+<ParamField path="ebs_config[*].size" type="number" default="256">
+  Volume size in GiB.
+</ParamField>
+
+<ParamField path="ebs_config[*].type" type="string" default="gp3">
+  EBS volume type, for example `"gp3"` or `"io2"`.
+</ParamField>
+
+<ParamField path="ebs_config[*].iops" type="number" optional>
+  Provisioned IOPS. Only valid for `io1` and `io2` volume types.
+</ParamField>
+
+<ParamField path="ebs_config[*].throughput" type="number" optional>
+  Throughput in MiB/s. Only valid for `gp3` volumes.
+</ParamField>
+
+<ParamField path="ebs_config[*].volumes_per_instance" type="number" optional>
+  Number of volumes of this configuration to attach per instance.
+</ParamField>
+
+## Complete example
+
+The following example creates a private cluster with all three group types configured:
+
+```hcl
+module "emr" {
+  source = "terraform-aws-modules/emr/aws"
+
+  name = "example-instance-group"
+
+  release_label = "emr-7.9.0"
+  applications  = ["spark", "trino"]
+  auto_termination_policy = {
+    idle_timeout = 3600
+  }
+
+  master_instance_group = {
+    name           = "master-group"
+    instance_count = 1
+    instance_type  = "m5.xlarge"
+  }
+
+  core_instance_group = {
+    name           = "core-group"
+    instance_count = 2
+    instance_type  = "c4.large"
+  }
+
+  task_instance_group = {
+    name           = "task-group"
+    instance_count = 2
+    instance_type  = "c5.xlarge"
+    bid_price      = "0.1"
+
+    ebs_config = [{
+      size                 = 256
+      type                 = "gp3"
+      volumes_per_instance = 1
+    }]
+    ebs_optimized = true
+  }
+
+  ebs_root_volume_size = 64
+  ec2_attributes = {
+    # Instance groups only support one Subnet/AZ
+    # Subnets should be private subnets and tagged with
+    # { "for-use-with-amazon-emr-managed-policies" = true }
+    subnet_id = "subnet-abcde012"
+  }
+  vpc_id = "vpc-1234556abcdef"
+
+  scale_down_behavior    = "TERMINATE_AT_TASK_COMPLETION"
+  step_concurrency_level = 3
+  termination_protection = false
+  visible_to_all_users   = true
+
+  tags = {
+    Terraform   = "true"
+    Environment = "dev"
+  }
+}
+```

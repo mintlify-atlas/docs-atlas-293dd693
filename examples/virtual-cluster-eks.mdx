@@ -1,0 +1,200 @@
+---
+title: "Virtual cluster on EKS"
+description: "Run EMR jobs on an Amazon EKS cluster using EMR on EKS virtual clusters."
+---
+
+An EMR virtual cluster maps an EMR namespace to a Kubernetes namespace on an existing EKS cluster. EMR schedules Spark jobs as pods inside that namespace. You manage the EKS cluster; EMR manages job execution.
+
+The virtual cluster submodule is at `modules/virtual-cluster`. Source it as `terraform-aws-modules/emr/aws//modules/virtual-cluster`.
+
+## Prerequisites
+
+- An existing EKS cluster with IRSA (IAM Roles for Service Accounts) enabled.
+- An OIDC provider associated with the cluster.
+- The AWS CLI installed locally (required for the `aws eks get-token` authentication helper).
+
+<Note>
+IRSA is currently required for EMR on EKS. Track the upstream issue for native EKS Pod Identity support at [aws/containers-roadmap#2397](https://github.com/aws/containers-roadmap/issues/2397).
+</Note>
+
+## Setup
+
+<Steps>
+  <Step title="Provision the EKS cluster">
+    Use the `terraform-aws-modules/eks/aws` module to create an EKS cluster. Enable IRSA and set up the Kubernetes provider so Terraform can create the EMR namespace and RBAC resources:
+
+    ```hcl
+    provider "kubernetes" {
+      host                   = module.eks.cluster_endpoint
+      cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+      exec {
+        api_version = "client.authentication.k8s.io/v1beta1"
+        command     = "aws"
+        args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+      }
+    }
+
+    module "eks" {
+      source  = "terraform-aws-modules/eks/aws"
+      version = "~> 21.0"
+
+      name                   = local.name
+      kubernetes_version     = "1.33"
+      endpoint_public_access = true
+
+      enable_cluster_creator_admin_permissions = true
+
+      # Required for EMR on EKS
+      enable_irsa = true
+
+      compute_config = {
+        enabled    = true
+        node_pools = ["general-purpose", "system"]
+      }
+
+      vpc_id     = module.vpc.vpc_id
+      subnet_ids = module.vpc.private_subnets
+
+      # EKS Auto Mode uses the cluster primary security group
+      create_security_group      = false
+      create_node_security_group = false
+
+      tags = local.tags
+    }
+    ```
+  </Step>
+
+  <Step title="Create the virtual cluster">
+    Point the virtual cluster module at the EKS cluster name and OIDC provider ARN. Set `create_namespace = true` to let the module create the Kubernetes namespace and the required RBAC role and role binding.
+
+    ```hcl
+    module "emr_virtual_cluster" {
+      source = "terraform-aws-modules/emr/aws//modules/virtual-cluster"
+
+      eks_cluster_name      = module.eks.cluster_name
+      eks_oidc_provider_arn = module.eks.oidc_provider_arn
+
+      name             = "emr-custom"
+      create_namespace = true
+      namespace        = "emr-custom"
+
+      s3_bucket_arns = [
+        module.s3_bucket.s3_bucket_arn,
+        "${module.s3_bucket.s3_bucket_arn}/*"
+      ]
+
+      role_name                     = "emr-custom-role"
+      iam_role_use_name_prefix      = false
+      iam_role_path                 = "/"
+      iam_role_description          = "EMR custom role"
+      iam_role_permissions_boundary = null
+      iam_role_additional_policies  = {}
+
+      tags = local.tags
+    }
+    ```
+
+    The module creates:
+    - A Kubernetes namespace, `Role`, and `RoleBinding` in the namespace.
+    - An IAM execution role with the S3 bucket access policy and IRSA trust policy.
+    - A CloudWatch log group for job logs.
+    - The `aws_emr_containers_virtual_cluster` resource scoped to the namespace.
+  </Step>
+
+  <Step title="Configure S3 bucket access">
+    Pass the S3 bucket ARN (and the wildcard for objects) to `s3_bucket_arns`. The module attaches an IAM policy that allows `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, and `s3:ListBucket` against those ARNs:
+
+    ```hcl
+    s3_bucket_arns = [
+      module.s3_bucket.s3_bucket_arn,
+      "${module.s3_bucket.s3_bucket_arn}/*"
+    ]
+    ```
+
+    If your jobs need additional permissions (for example, Glue catalog access), use `iam_role_additional_policies` to attach extra policies to the execution role.
+  </Step>
+
+  <Step title="Submit a job">
+    After Terraform applies, submit a Spark job using the AWS CLI. The example below syncs a sample script from a public workshop bucket and then submits a Pi estimation job:
+
+    ```bash
+    # Sync workshop scripts to your bucket
+    aws s3 sync s3://aws-data-analytics-workshops/emr-eks-workshop/scripts/ \
+      s3://<your-bucket>/emr-eks-workshop/scripts/
+
+    # Submit the Spark job
+    aws emr-containers start-job-run \
+      --virtual-cluster-id <virtual-cluster-id> \
+      --name example \
+      --execution-role-arn <job-execution-role-arn> \
+      --release-label emr-7.9.0-latest \
+      --job-driver '{
+          "sparkSubmitJobDriver": {
+              "entryPoint": "s3://<your-bucket>/emr-eks-workshop/scripts/pi.py",
+              "sparkSubmitParameters": "--conf spark.executor.instances=2 --conf spark.executor.memory=2G --conf spark.executor.cores=2 --conf spark.driver.cores=1"
+          }
+      }' \
+      --configuration-overrides '{
+          "applicationConfiguration": [
+            {
+              "classification": "spark-defaults",
+              "properties": {
+                "spark.driver.memory": "2G"
+              }
+            }
+          ],
+          "monitoringConfiguration": {
+            "cloudWatchMonitoringConfiguration": {
+              "logGroupName": "<cloudwatch-log-group-name>",
+              "logStreamNamePrefix": "eks-blueprints"
+            }
+          }
+      }'
+    ```
+
+    Retrieve the `virtual_cluster_id` and `job_execution_role_arn` from the Terraform outputs:
+
+    ```bash
+    terraform output complete_virtual_cluster_id
+    terraform output complete_job_execution_role_arn
+    ```
+  </Step>
+</Steps>
+
+## Multiple virtual clusters
+
+You can create multiple virtual clusters on the same EKS cluster, each in its own namespace:
+
+```hcl
+module "emr_default" {
+  source = "terraform-aws-modules/emr/aws//modules/virtual-cluster"
+
+  eks_cluster_name      = module.eks.cluster_name
+  eks_oidc_provider_arn = module.eks.oidc_provider_arn
+
+  s3_bucket_arns = [
+    module.s3_bucket.s3_bucket_arn,
+    "${module.s3_bucket.s3_bucket_arn}/*"
+  ]
+
+  name      = "emr-default"
+  namespace = "emr-default"
+
+  tags = local.tags
+}
+```
+
+## VPC endpoints
+
+The full working example at `examples/virtual-cluster/main.tf` creates VPC endpoints for `emr-containers`, `ecr.api`, `ecr.dkr`, `sts`, `logs`, and `s3`. These endpoints keep EKS node traffic on the AWS network and are recommended for production clusters.
+
+## Destroy considerations
+
+If an EMR virtual cluster fails to delete and enters the `ARRESTED` state, you can force-delete it with:
+
+```bash
+aws emr-containers list-virtual-clusters --region <region> --states ARRESTED \
+  --query 'virtualClusters[0].id' --output text | \
+  xargs -I{} aws emr-containers delete-virtual-cluster --region <region> --id {}
+```

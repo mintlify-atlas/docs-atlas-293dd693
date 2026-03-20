@@ -1,0 +1,122 @@
+---
+title: 'EMR Studio'
+description: 'Create a collaborative notebook environment for data scientists and engineers with EMR Studio.'
+keywords: ['emr', 'studio', 'notebook', 'sso', 'iam', 'terraform']
+---
+
+EMR Studio is a managed web-based notebook environment where data scientists and engineers can develop, visualize, and debug Apache Spark and Hive applications using Jupyter notebooks. Studios are backed by an S3 location that stores workspace and notebook files.
+
+Use the `terraform-aws-modules/emr/aws//modules/studio` submodule to create an EMR Studio.
+
+## Authentication modes
+
+EMR Studio supports two authentication modes, set via the `auth_mode` variable:
+
+- **`IAM`** (default) — Users authenticate with their AWS IAM credentials or federated identities via an IdP.
+- **`SSO`** — Users authenticate through IAM Identity Center (formerly AWS SSO). This mode requires session mappings to grant access to specific users or groups.
+
+## Key variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `name` | Name of the Studio | `""` |
+| `auth_mode` | Authentication mode: `"IAM"` or `"SSO"` | `"IAM"` |
+| `default_s3_location` | S3 URI for backing up workspaces and notebooks | `""` |
+| `vpc_id` | VPC ID to associate with the Studio | `""` |
+| `subnet_ids` | List of subnet IDs (maximum 5) | `[]` |
+| `description` | Human-readable description of the Studio | `null` |
+| `encryption_key_arn` | KMS key ARN to encrypt workspace and notebook files in S3 | `null` |
+| `session_mappings` | IAM Identity Center user/group mappings (SSO mode only) | `null` |
+
+## Session mappings (SSO mode)
+
+When `auth_mode = "SSO"`, you use `session_mappings` to grant IAM Identity Center users or groups access to the Studio. Each entry in the map specifies:
+
+- `identity_type` — `"USER"` or `"GROUP"`
+- `identity_id` — the IAM Identity Center identifier for the user or group
+- `identity_name` — optional display name
+- `session_policy_arn` — optional ARN of a session policy to apply
+
+The module creates an `aws_emr_studio_session_mapping` resource for each entry.
+
+## Examples
+
+<Tabs>
+  <Tab title="SSO (IAM Identity Center)">
+
+```hcl
+module "emr_studio" {
+  source = "terraform-aws-modules/emr/aws//modules/studio"
+
+  name                = "example-sso"
+  description         = "EMR Studio using SSO authentication"
+  auth_mode           = "SSO"
+  default_s3_location = "s3://example-s3-bucket/example"
+
+  vpc_id     = "vpc-1234556abcdef"
+  subnet_ids = ["subnet-abcde012", "subnet-bcde012a", "subnet-fghi345a"]
+
+  # SSO Mapping
+  session_mappings = {
+    admin_group = {
+      identity_type = "GROUP"
+      identity_id   = "012345678f-987a65b4-3210-4567-b5a6-12ab345c6d78"
+    }
+  }
+
+  tags = local.tags
+}
+```
+
+  </Tab>
+  <Tab title="IAM">
+
+```hcl
+module "emr_studio" {
+  source = "terraform-aws-modules/emr/aws//modules/studio"
+
+  name                = "example-iam"
+  auth_mode           = "IAM"
+  default_s3_location = "s3://example-s3-bucket/example"
+
+  vpc_id     = "vpc-1234556abcdef"
+  subnet_ids = ["subnet-abcde012", "subnet-bcde012a", "subnet-fghi345a"]
+
+  tags = {
+    Terraform   = "true"
+    Environment = "dev"
+  }
+}
+```
+
+  </Tab>
+</Tabs>
+
+## IAM roles
+
+The module creates two IAM roles by default:
+
+- **Service role** — used by EMR Studio to access AWS services such as EC2, S3, and Secrets Manager on your behalf.
+- **User role** — assumed by Studio users when they interact with AWS resources from a workspace.
+
+You can supply existing roles instead of creating new ones:
+
+| Variable | Description | Default |
+|---|---|---|
+| `create_service_role` | Create the service IAM role | `true` |
+| `service_role_arn` | ARN of an existing service IAM role | `null` |
+| `service_role_s3_bucket_arns` | S3 bucket ARNs the service role can read/write | `[]` |
+| `service_role_secrets_manager_arns` | Secrets Manager ARNs for Git credential access | `[]` |
+| `create_user_role` | Create the user IAM role | `true` |
+| `user_role_arn` | ARN of an existing user IAM role | `null` |
+| `user_role_s3_bucket_arns` | S3 bucket ARNs the user role can read/write | `[]` |
+
+## Security groups
+
+The module creates two security groups — one for the Studio engine and one for the workspace — and wires them together. The engine security group accepts inbound traffic from the workspace security group, and the workspace security group allows outbound traffic to the engine.
+
+Set `create_security_groups = false` and supply your own group IDs via `engine_security_group_id` and `workspace_security_group_id` if you prefer to manage security groups externally.
+
+<Note>
+A Studio can be associated with a maximum of 5 subnets. All subnets must belong to the VPC specified by `vpc_id`.
+</Note>

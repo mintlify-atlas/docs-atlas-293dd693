@@ -1,0 +1,148 @@
+---
+title: IAM roles
+description: Understand the three IAM roles the module creates and how to customize or replace them with externally managed roles.
+---
+
+The module creates three IAM roles by default:
+
+1. **Service role** — used by the EMR service to manage cluster resources.
+2. **Autoscaling role** — used by Application Auto Scaling and EMR to scale instance groups.
+3. **EC2 instance profile role** — assumed by EC2 instances in the cluster to access AWS services.
+
+All three roles share common naming and path options controlled by the [common IAM settings](#common-iam-settings).
+
+<Note>
+  The service role is tagged with `{ "for-use-with-amazon-emr-managed-policies" = true }` and is attached the `AmazonEMRServicePolicy_v2` managed policy by default. This policy requires you to tag your VPC and subnets with the same key before EMR can create and manage cluster resources. See the [AWS documentation](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-managed-iam-policies.html) for details.
+</Note>
+
+## Service IAM role
+
+<ParamField path="create_service_iam_role" type="bool" default="true">
+  Set to `false` to skip creating the service role and supply an existing role via `service_iam_role_arn`.
+</ParamField>
+
+<ParamField path="service_iam_role_arn" type="string" optional>
+  ARN of an existing service role to use when `create_service_iam_role = false`.
+</ParamField>
+
+<ParamField path="service_iam_role_name" type="string" optional>
+  Name for the service IAM role. Defaults to `"<cluster-name>-service"`. When `iam_role_use_name_prefix = true` this value is used as a name prefix.
+</ParamField>
+
+<ParamField path="service_iam_role_description" type="string" optional>
+  Description attached to the service IAM role.
+</ParamField>
+
+<ParamField path="service_iam_role_policies" type="map(string)">
+  Map of IAM policy ARNs to attach to the service role. Defaults to `AmazonEMRServicePolicy_v2`. The key is used as a logical identifier; the value is the policy ARN. You can add additional policies or replace the default.
+
+  ```hcl
+  service_iam_role_policies = {
+    AmazonEMRServicePolicy_v2 = "arn:aws:iam::aws:policy/service-role/AmazonEMRServicePolicy_v2"
+    CustomPolicy              = "arn:aws:iam::123456789012:policy/my-custom-policy"
+  }
+  ```
+</ParamField>
+
+### Service pass-role policy
+
+The module also creates an inline `iam:PassRole` policy and attaches it to the service role. This allows the EMR service to pass the autoscaling and instance profile roles to Application Auto Scaling and EC2.
+
+<ParamField path="service_pass_role_policy_name" type="string" optional>
+  Name for the pass-role policy. Defaults to `"<cluster-name>-passrole"`.
+</ParamField>
+
+<ParamField path="service_pass_role_policy_description" type="string" optional>
+  Description attached to the pass-role policy.
+</ParamField>
+
+## Autoscaling IAM role
+
+The autoscaling role is only created when using instance groups. It is automatically skipped when you configure instance fleets (`master_instance_fleet` or `core_instance_fleet`).
+
+<ParamField path="create_autoscaling_iam_role" type="bool" default="true">
+  Set to `false` to skip creating the autoscaling role and supply an existing role via `autoscaling_iam_role_arn`.
+</ParamField>
+
+<ParamField path="autoscaling_iam_role_arn" type="string" optional>
+  ARN of an existing autoscaling role to use when `create_autoscaling_iam_role = false`.
+</ParamField>
+
+<ParamField path="autoscaling_iam_role_name" type="string" optional>
+  Name for the autoscaling IAM role. Defaults to `"<cluster-name>-autoscaling"`.
+</ParamField>
+
+<ParamField path="autoscaling_iam_role_description" type="string" optional>
+  Description attached to the autoscaling IAM role.
+</ParamField>
+
+The module attaches the `AmazonElasticMapReduceforAutoScalingRole` AWS managed policy to this role.
+
+## EC2 instance profile
+
+<ParamField path="create_iam_instance_profile" type="bool" default="true">
+  Set to `false` to skip creating the EC2 IAM role and instance profile. You must then supply an existing profile name via `iam_instance_profile_name`.
+</ParamField>
+
+<ParamField path="iam_instance_profile_name" type="string" optional>
+  Name for the EC2 IAM role and instance profile. Defaults to `"<cluster-name>-instance"`. Also used to reference an existing profile when `create_iam_instance_profile = false`.
+</ParamField>
+
+<ParamField path="iam_instance_profile_description" type="string" optional>
+  Description for the EC2 IAM role.
+</ParamField>
+
+<ParamField path="iam_instance_profile_policies" type="map(string)">
+  Map of IAM policy ARNs to attach to the instance profile role. Defaults to `AmazonElasticMapReduceforEC2Role`.
+
+  ```hcl
+  iam_instance_profile_policies = {
+    AmazonElasticMapReduceforEC2Role = "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role"
+    S3ReadAccess                     = "arn:aws:iam::123456789012:policy/my-s3-read-policy"
+  }
+  ```
+</ParamField>
+
+<ParamField path="iam_instance_profile_role_arn" type="string" optional>
+  ARN of an existing IAM role to use when you supply a custom instance profile but still want the module to create a service role (for the pass-role policy).
+</ParamField>
+
+## Common IAM settings
+
+The following variables apply to all three roles.
+
+<ParamField path="iam_role_use_name_prefix" type="bool" default="true">
+  When `true`, the role name is used as a prefix and AWS appends a unique suffix. This avoids name collisions when deploying multiple clusters.
+</ParamField>
+
+<ParamField path="iam_role_path" type="string" optional>
+  IAM path for all roles created by the module, for example `"/emr/"`.
+</ParamField>
+
+<ParamField path="iam_role_permissions_boundary" type="string" optional>
+  ARN of an IAM policy to use as the permissions boundary for all roles.
+</ParamField>
+
+<ParamField path="iam_role_tags" type="map(string)" default="{}">
+  Additional tags to merge onto all IAM roles.
+</ParamField>
+
+## Using external roles
+
+To bring your own roles, disable role creation and supply the existing identifiers:
+
+```hcl
+module "emr" {
+  source = "terraform-aws-modules/emr/aws"
+
+  # Disable role creation
+  create_service_iam_role     = false
+  create_autoscaling_iam_role = false
+  create_iam_instance_profile = false
+
+  # Supply existing identifiers
+  service_iam_role_arn        = "arn:aws:iam::123456789012:role/my-emr-service-role"
+  autoscaling_iam_role_arn    = "arn:aws:iam::123456789012:role/my-emr-autoscaling-role"
+  iam_instance_profile_name   = "my-emr-instance-profile"
+}
+```

@@ -1,0 +1,112 @@
+---
+title: 'Virtual cluster'
+description: 'Run EMR workloads on Amazon EKS using EMR virtual clusters, without managing separate EC2 clusters.'
+keywords: ['emr', 'eks', 'virtual cluster', 'emr on eks', 'terraform']
+---
+
+An EMR virtual cluster maps an EMR environment to a Kubernetes namespace on an existing Amazon EKS cluster. Jobs submitted to the virtual cluster run as pods inside that namespace, letting you share the same EKS infrastructure between EMR workloads and other Kubernetes applications.
+
+Use the `terraform-aws-modules/emr/aws//modules/virtual-cluster` submodule to create a virtual cluster.
+
+<Note>
+You need an existing EKS cluster before creating a virtual cluster. The module also requires the OIDC provider ARN for the cluster, which is used to create the job execution IAM role with the correct trust policy. The Kubernetes provider in your Terraform configuration must be pointed at the EKS cluster.
+</Note>
+
+## How it works
+
+The module creates:
+- An `aws_emrcontainers_virtual_cluster` resource bound to your EKS cluster and namespace
+- A Kubernetes namespace (optional, controlled by `create_namespace`)
+- A Kubernetes Role and RoleBinding granting EMR the permissions it needs in the namespace
+- A job execution IAM role with an OIDC trust policy scoped to the EKS cluster
+- An IAM policy granting S3 access for the buckets you specify
+- A CloudWatch log group for cluster logs
+
+## Key variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `eks_cluster_name` | Name of the existing EKS cluster | `""` |
+| `eks_oidc_provider_arn` | OIDC provider ARN for the EKS cluster | `""` |
+| `name` | Name of the EMR virtual cluster | `""` |
+| `namespace` | Kubernetes namespace for EMR on EKS | `"emr-containers"` |
+| `create_namespace` | Create the Kubernetes namespace | `true` |
+| `create_iam_role` | Create the job execution IAM role | `true` |
+| `create_kubernetes_role` | Create the Kubernetes Role and RoleBinding | `true` |
+| `s3_bucket_arns` | S3 bucket ARNs the job execution role can read/write | `[]` |
+| `role_name` | Name to use for the IAM role and Kubernetes RBAC role | `null` |
+| `iam_role_additional_policies` | Additional IAM policies to attach to the job execution role | `{}` |
+
+## Examples
+
+<Tabs>
+  <Tab title="Custom">
+
+This example creates a virtual cluster with explicit names and a dedicated namespace, and fully configures the job execution IAM role:
+
+```hcl
+module "emr_virtual_cluster" {
+  source = "terraform-aws-modules/emr/aws//modules/virtual-cluster"
+
+  eks_cluster_name      = "example"
+  eks_oidc_provider_arn = "arn:aws:iam::0123456789:oidc-provider/eks-example"
+
+  name             = "emr-custom"
+  create_namespace = true
+  namespace        = "emr-custom"
+
+  create_iam_role = true
+  s3_bucket_arns = [
+    "arn:aws:s3:::/my-elasticmapreduce-bucket",
+    "arn:aws:s3:::/my-elasticmapreduce-bucket/*",
+  ]
+  role_name                     = "emr-custom-role"
+  iam_role_use_name_prefix      = false
+  iam_role_path                 = "/"
+  iam_role_description          = "EMR custom Role"
+  iam_role_permissions_boundary = null
+  iam_role_additional_policies  = []
+
+  tags = {
+    Terraform   = "true"
+    Environment = "dev"
+  }
+}
+```
+
+  </Tab>
+  <Tab title="Default">
+
+This example uses module defaults — the namespace and IAM role are created automatically with generated names:
+
+```hcl
+module "emr_virtual_cluster" {
+  source = "terraform-aws-modules/emr/aws//modules/virtual-cluster"
+
+  eks_cluster_name      = "example"
+  eks_oidc_provider_arn = "arn:aws:iam::0123456789:oidc-provider/eks-example"
+
+  name      = "emr-default"
+  namespace = "emr-default"
+
+  tags = {
+    Terraform   = "true"
+    Environment = "dev"
+  }
+}
+```
+
+  </Tab>
+</Tabs>
+
+## CloudWatch logging
+
+The module creates a CloudWatch log group by default using the name pattern `/emr-on-eks-logs/emr-workload/<NAMESPACE>` and retains logs for 7 days. You can adjust retention, supply a KMS key for encryption, or disable creation entirely if you manage the log group externally:
+
+| Variable | Description | Default |
+|---|---|---|
+| `create_cloudwatch_log_group` | Create the CloudWatch log group | `true` |
+| `cloudwatch_log_group_name` | Override the default log group name | `null` |
+| `cloudwatch_log_group_retention_in_days` | Log retention period in days | `7` |
+| `cloudwatch_log_group_kms_key_id` | KMS key ARN to encrypt the log group | `null` |
+| `cloudwatch_log_group_class` | Log class: `STANDARD` or `INFREQUENT_ACCESS` | `null` |

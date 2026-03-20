@@ -1,0 +1,173 @@
+---
+title: 'EMR Serverless'
+description: 'Run Spark and Hive workloads on EMR Serverless without provisioning or managing EC2 instances.'
+keywords: ['emr', 'serverless', 'spark', 'hive', 'terraform']
+---
+
+EMR Serverless lets you run Apache Spark and Apache Hive jobs without provisioning or managing clusters. You define the application type, set capacity bounds, and submit jobs — AWS automatically allocates and scales the underlying compute.
+
+Use the `terraform-aws-modules/emr/aws//modules/serverless` submodule to create an EMR Serverless application.
+
+## Application types
+
+Set the `type` variable to `"spark"` (default) or `"hive"` to select the application runtime. The worker roles available in `initial_capacity` differ between the two types:
+
+- **Spark** uses `Driver` and `Executor` worker roles.
+- **Hive** uses `HiveDriver` and `TezTask` worker roles.
+
+## Key variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `name` | Name of the serverless application | `""` |
+| `type` | Application type: `"spark"` or `"hive"` | `"spark"` |
+| `release_label` | Explicit EMR release version (e.g. `"emr-7.0.0"`) | `null` |
+| `release_label_prefix` | Prefix used to auto-select the latest matching release | Latest emr-7.x |
+| `initial_capacity` | Pre-initialized worker capacity per worker type | `null` |
+| `maximum_capacity` | Cumulative resource ceiling across all running workers | `null` |
+| `network_configuration` | VPC subnet IDs and security group IDs for private connectivity | `null` |
+| `auto_start_configuration` | Enable or disable automatic start on job submission | `null` |
+| `auto_stop_configuration` | Enable automatic stop after an idle timeout | `null` |
+| `architecture` | CPU architecture: `"X86_64"` or `"ARM64"` | `null` |
+
+## Initial capacity
+
+The `initial_capacity` block pre-warms workers so that jobs start immediately without a cold-start delay. Each entry in the map corresponds to a worker role.
+
+For Spark, define `Driver` and `Executor` workers. For each role, set:
+- `initial_capacity_type` — the worker role name (e.g. `"Driver"`, `"Executor"`, `"HiveDriver"`, `"TezTask"`)
+- `worker_count` — number of pre-initialized workers
+- `worker_configuration` — resource allocation per worker (`cpu`, `memory`, and optionally `disk`)
+
+## Maximum capacity
+
+The `maximum_capacity` block sets a hard ceiling on cumulative resource usage across all workers at any point in time. No new workers are provisioned once any limit is reached.
+
+Set `cpu` and `memory` (both required) and optionally `disk`.
+
+## Examples
+
+<Tabs>
+  <Tab title="Spark">
+
+```hcl
+module "emr_serverless" {
+  source = "terraform-aws-modules/emr/aws//modules/serverless"
+
+  name = "example-spark"
+
+  release_label_prefix = "emr-7"
+
+  initial_capacity = {
+    driver = {
+      initial_capacity_type = "Driver"
+
+      initial_capacity_config = {
+        worker_count = 2
+        worker_configuration = {
+          cpu    = "4 vCPU"
+          memory = "12 GB"
+        }
+      }
+    }
+
+    executor = {
+      initial_capacity_type = "Executor"
+
+      initial_capacity_config = {
+        worker_count = 2
+        worker_configuration = {
+          cpu    = "8 vCPU"
+          disk   = "64 GB"
+          memory = "24 GB"
+        }
+      }
+    }
+  }
+
+  maximum_capacity = {
+    cpu    = "48 vCPU"
+    memory = "144 GB"
+  }
+
+  network_configuration = {
+    subnet_ids = ["subnet-abcde012", "subnet-bcde012a", "subnet-fghi345a"]
+  }
+
+  security_group_egress_rules = {
+    all = {
+      ip_protocol = "-1"
+      cidr_ipv4 = "0.0.0.0/0"
+    }
+  }
+
+  tags = {
+    Terraform   = "true"
+    Environment = "dev"
+  }
+}
+```
+
+  </Tab>
+  <Tab title="Hive">
+
+```hcl
+module "emr_serverless" {
+  source = "terraform-aws-modules/emr/aws//modules/serverless"
+
+  name = "example-hive"
+
+  release_label_prefix = "emr-7"
+  type                 = "hive"
+
+  initial_capacity = {
+    driver = {
+      initial_capacity_type = "HiveDriver"
+
+      initial_capacity_config = {
+        worker_count = 2
+        worker_configuration = {
+          cpu    = "2 vCPU"
+          memory = "6 GB"
+        }
+      }
+    }
+
+    task = {
+      initial_capacity_type = "TezTask"
+
+      initial_capacity_config = {
+        worker_count = 2
+        worker_configuration = {
+          cpu    = "4 vCPU"
+          disk   = "32 GB"
+          memory = "12 GB"
+        }
+      }
+    }
+  }
+
+  maximum_capacity = {
+    cpu    = "24 vCPU"
+    memory = "72 GB"
+  }
+
+  tags = {
+    Terraform   = "true"
+    Environment = "dev"
+  }
+}
+```
+
+  </Tab>
+</Tabs>
+
+## Network configuration
+
+When you supply `network_configuration.subnet_ids`, the module automatically creates a security group in the VPC of the first subnet and attaches it to the application. You can control the security group's egress and ingress rules with `security_group_egress_rules` and `security_group_ingress_rules`.
+
+To skip security group creation (for example, when you supply your own via `network_configuration.security_group_ids`), set `create_security_group = false`.
+
+<Tip>
+Omitting `network_configuration` deploys the application outside a VPC. This is suitable for workloads that access only public AWS service endpoints, but you lose private connectivity to resources inside your VPC.
+</Tip>

@@ -1,0 +1,281 @@
+---
+title: "Public cluster"
+description: "Deploy an EMR cluster with nodes in public subnets."
+---
+
+A public cluster places EC2 instances into public subnets. This is the simplest network topology to get started, but you should review the security considerations below before using it in production.
+
+The configuration is nearly identical to a private cluster. The key differences are:
+
+- Set `is_private_cluster = false`.
+- Point `ec2_attributes.subnet_ids` (or `subnet_id` for instance groups) at public subnets.
+- Tag your **public** subnets instead of private subnets.
+
+<Warning>
+Nodes in public subnets may receive public IP addresses. Ensure your security groups restrict inbound access appropriately. Prefer [private clusters](/examples/private-cluster) for production workloads.
+</Warning>
+
+<Note>
+Tag your public subnets with `"for-use-with-amazon-emr-managed-policies" = true`. The module tags the VPC and security groups it creates on your behalf; you are responsible for tagging your own subnets. See the [EMR managed IAM policies documentation](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-managed-iam-policies.html#manually-tagged-resources) for details.
+</Note>
+
+## Configuration
+
+<Tabs>
+  <Tab title="Instance fleet">
+    ```hcl
+    module "emr" {
+      source = "terraform-aws-modules/emr/aws"
+
+      name = "example-instance-fleet"
+
+      release_label_filters = {
+        emr7 = {
+          prefix = "emr-7"
+        }
+      }
+      applications = ["spark", "trino"]
+      auto_termination_policy = {
+        idle_timeout = 14400
+      }
+
+      bootstrap_action = [
+        {
+          path = "file:/bin/echo",
+          name = "Just an example",
+          args = ["Hello World!"]
+        }
+      ]
+
+      configurations_json = jsonencode([
+        {
+          "Classification" : "spark-env",
+          "Configurations" : [
+            {
+              "Classification" : "export",
+              "Properties" : {
+                "JAVA_HOME" : "/usr/lib/jvm/java-1.8.0"
+              }
+            }
+          ],
+          "Properties" : {}
+        }
+      ])
+
+      master_instance_fleet = {
+        name                      = "master-fleet"
+        target_on_demand_capacity = 1
+        instance_type_configs = [
+          {
+            instance_type = "m5.xlarge"
+          }
+        ]
+      }
+
+      core_instance_fleet = {
+        name                      = "core-fleet"
+        target_on_demand_capacity = 2
+        target_spot_capacity      = 2
+        instance_type_configs = [
+          {
+            instance_type     = "c4.large"
+            weighted_capacity = 1
+          },
+          {
+            bid_price_as_percentage_of_on_demand_price = 100
+            ebs_config = [{
+              size                 = 256
+              type                 = "gp3"
+              volumes_per_instance = 1
+            }]
+            instance_type     = "c5.xlarge"
+            weighted_capacity = 2
+          },
+          {
+            bid_price_as_percentage_of_on_demand_price = 100
+            instance_type                              = "c6i.xlarge"
+            weighted_capacity                          = 2
+          }
+        ]
+        launch_specifications = {
+          spot_specification = {
+            allocation_strategy      = "capacity-optimized"
+            block_duration_minutes   = 0
+            timeout_action           = "SWITCH_TO_ON_DEMAND"
+            timeout_duration_minutes = 5
+          }
+        }
+      }
+
+      task_instance_fleet = {
+        name                      = "task-fleet"
+        target_on_demand_capacity = 0
+        target_spot_capacity      = 2
+        instance_type_configs = [
+          {
+            instance_type     = "c4.large"
+            weighted_capacity = 1
+          },
+          {
+            bid_price_as_percentage_of_on_demand_price = 100
+            ebs_config = [{
+              size                 = 256
+              type                 = "gp3"
+              volumes_per_instance = 1
+            }]
+            instance_type     = "c5.xlarge"
+            weighted_capacity = 2
+          }
+        ]
+        launch_specifications = {
+          spot_specification = {
+            allocation_strategy      = "capacity-optimized"
+            block_duration_minutes   = 0
+            timeout_action           = "SWITCH_TO_ON_DEMAND"
+            timeout_duration_minutes = 5
+          }
+        }
+      }
+
+      ebs_root_volume_size = 64
+      ec2_attributes = {
+        # Subnets must be public and tagged with
+        # { "for-use-with-amazon-emr-managed-policies" = true }
+        subnet_ids = module.vpc.public_subnets
+      }
+      vpc_id = module.vpc.vpc_id
+
+      # Required for a public cluster
+      is_private_cluster = false
+
+      keep_job_flow_alive_when_no_steps = true
+      list_steps_states                 = ["PENDING", "RUNNING", "CANCEL_PENDING", "CANCELLED", "FAILED", "INTERRUPTED", "COMPLETED"]
+      log_uri                           = "s3://${module.s3_bucket.s3_bucket_id}/"
+
+      scale_down_behavior    = "TERMINATE_AT_TASK_COMPLETION"
+      step_concurrency_level = 3
+      termination_protection = false
+      visible_to_all_users   = true
+
+      tags = local.tags
+    }
+    ```
+  </Tab>
+  <Tab title="Instance group">
+    Instance groups only support a single subnet and availability zone. Pass `subnet_id` (singular).
+
+    ```hcl
+    module "emr" {
+      source = "terraform-aws-modules/emr/aws"
+
+      name = "example-instance-group"
+
+      release_label_filters = {
+        emr7 = {
+          prefix = "emr-7"
+        }
+      }
+      applications = ["spark", "trino"]
+      auto_termination_policy = {
+        idle_timeout = 14400
+      }
+
+      bootstrap_action = [
+        {
+          name = "Just an example",
+          path = "file:/bin/echo",
+          args = ["Hello World!"]
+        }
+      ]
+
+      configurations_json = jsonencode([
+        {
+          "Classification" : "spark-env",
+          "Configurations" : [
+            {
+              "Classification" : "export",
+              "Properties" : {
+                "JAVA_HOME" : "/usr/lib/jvm/java-1.8.0"
+              }
+            }
+          ],
+          "Properties" : {}
+        }
+      ])
+
+      master_instance_group = {
+        name           = "master-group"
+        instance_count = 1
+        instance_type  = "m5.xlarge"
+      }
+
+      core_instance_group = {
+        name           = "core-group"
+        instance_count = 2
+        instance_type  = "c4.large"
+      }
+
+      task_instance_group = {
+        name           = "task-group"
+        instance_count = 2
+        instance_type  = "c4.xlarge"
+        bid_price      = "0.17"
+
+        ebs_config = [{
+          size                 = 256
+          type                 = "gp3"
+          volumes_per_instance = 1
+        }]
+        ebs_optimized = true
+      }
+
+      ebs_root_volume_size = 64
+      ec2_attributes = {
+        # Instance groups only support one subnet/AZ
+        subnet_id = element(module.vpc.public_subnets, 0)
+      }
+      vpc_id = module.vpc.vpc_id
+
+      # Required for a public cluster
+      is_private_cluster = false
+
+      keep_job_flow_alive_when_no_steps = true
+      list_steps_states                 = ["PENDING", "RUNNING", "CANCEL_PENDING", "CANCELLED", "FAILED", "INTERRUPTED", "COMPLETED"]
+      log_uri                           = "s3://${module.s3_bucket.s3_bucket_id}/"
+
+      scale_down_behavior    = "TERMINATE_AT_TASK_COMPLETION"
+      step_concurrency_level = 3
+      termination_protection = false
+      visible_to_all_users   = true
+
+      tags = local.tags
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Supporting resources
+
+The complete working example at `examples/public-cluster/main.tf` creates a VPC with public subnets only (no NAT gateway required) and an encrypted S3 bucket for logs.
+
+```hcl
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 6.0"
+
+  name = local.name
+  cidr = "10.0.0.0/16"
+
+  azs            = local.azs
+  public_subnets = [for k, v in local.azs : cidrsubnet("10.0.0.0/16", 8, k)]
+
+  enable_nat_gateway = false
+
+  # Tag public subnets so EMR managed policies can reference them
+  public_subnet_tags = { "for-use-with-amazon-emr-managed-policies" = true }
+}
+```
+
+<Note>
+Even without a NAT gateway, you should add S3 and EMR VPC endpoints to keep traffic on the AWS network and avoid data transfer charges. The private cluster example includes a reusable `vpc_endpoints` module block you can copy.
+</Note>

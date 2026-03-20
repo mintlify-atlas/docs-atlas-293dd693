@@ -1,0 +1,272 @@
+---
+title: "EMR Studio"
+description: "Deploy an EMR Studio for collaborative notebook-based development using SSO or IAM authentication."
+---
+
+EMR Studio is a web-based IDE for running Spark, PySpark, and SparkSQL workloads via Jupyter notebooks. It supports two authentication modes: IAM Identity Center (SSO) and IAM.
+
+The studio submodule is at `modules/studio`. Source it as `terraform-aws-modules/emr/aws//modules/studio`.
+
+## VPC and subnet requirements
+
+EMR Studio requires a VPC and at least one subnet. The studio itself is not deployed inside a VPC, but it uses the VPC to attach workspace and engine security groups for connectivity to EMR clusters and Spark applications.
+
+You must provide `vpc_id` and `subnet_ids`. For high availability, supply subnets across multiple availability zones.
+
+## Authentication
+
+<Tabs>
+  <Tab title="SSO (IAM Identity Center)">
+    SSO mode integrates with AWS IAM Identity Center. You map IAM Identity Center groups or users to the studio via `session_mappings`. Each mapping grants the identity a specific EMR Studio session policy.
+
+    This example looks up an existing IAM Identity Center group named `AWSControlTowerAdmins` and maps it to the studio:
+
+    ```hcl
+    data "aws_ssoadmin_instances" "this" {}
+
+    data "aws_identitystore_group" "this" {
+      identity_store_id = one(data.aws_ssoadmin_instances.this.identity_store_ids)
+
+      alternate_identifier {
+        unique_attribute {
+          attribute_path  = "DisplayName"
+          attribute_value = "AWSControlTowerAdmins"
+        }
+      }
+    }
+
+    module "emr_studio_sso" {
+      source = "terraform-aws-modules/emr/aws//modules/studio"
+
+      name                = "example-sso"
+      description         = "EMR Studio using SSO authentication"
+      auth_mode           = "SSO"
+      default_s3_location = "s3://${module.s3_bucket.s3_bucket_id}/example"
+
+      vpc_id     = module.vpc.vpc_id
+      subnet_ids = module.vpc.private_subnets
+
+      session_mappings = {
+        admin_group = {
+          identity_type = "GROUP"
+          identity_id   = data.aws_identitystore_group.this.group_id
+        }
+      }
+
+      tags = local.tags
+    }
+    ```
+
+    For a fully customized SSO studio with explicit service and user role configurations, security group rules, and S3 bucket scoping:
+
+    ```hcl
+    module "emr_studio_complete" {
+      source = "terraform-aws-modules/emr/aws//modules/studio"
+
+      name                = "example-complete"
+      description         = "EMR Studio using SSO authentication"
+      auth_mode           = "SSO"
+      default_s3_location = "s3://${module.s3_bucket.s3_bucket_id}/complete"
+
+      vpc_id     = module.vpc.vpc_id
+      subnet_ids = module.vpc.private_subnets
+
+      session_mappings = {
+        admin_group = {
+          identity_type = "GROUP"
+          identity_id   = data.aws_identitystore_group.this.group_id
+        }
+      }
+
+      # Service role
+      service_role_name        = "example-complete-service"
+      service_role_path        = "/complete/"
+      service_role_description = "EMR Studio complete service role"
+      service_role_tags        = { service = true }
+      service_role_s3_bucket_arns = [
+        module.s3_bucket.s3_bucket_arn,
+        "${module.s3_bucket.s3_bucket_arn}/complete/*"
+      ]
+
+      # User role
+      user_role_name        = "example-complete-user"
+      user_role_path        = "/complete/"
+      user_role_description = "EMR Studio complete user role"
+      user_role_tags        = { user = true }
+      user_role_s3_bucket_arns = [
+        module.s3_bucket.s3_bucket_arn,
+        "${module.s3_bucket.s3_bucket_arn}/complete/*"
+      ]
+
+      # Security groups
+      security_group_name = "example-complete"
+      security_group_tags = { complete = true }
+
+      engine_security_group_description = "EMR Studio complete engine security group"
+      engine_security_group_egress_rules = {
+        example = {
+          description = "Egress to VPC network"
+          from_port   = 443
+          to_port     = 443
+          ip_protocol = "tcp"
+          cidr_ipv4   = module.vpc.vpc_cidr_block
+        }
+      }
+
+      workspace_security_group_description = "EMR Studio complete workspace security group"
+      workspace_security_group_egress_rules = {
+        example = {
+          description = "Egress to internet"
+          from_port   = 443
+          to_port     = 443
+          ip_protocol = "tcp"
+          cidr_ipv4   = "0.0.0.0/0"
+        }
+      }
+
+      tags = local.tags
+    }
+    ```
+  </Tab>
+  <Tab title="IAM">
+    IAM mode authenticates users through AWS IAM credentials. This is useful when IAM Identity Center is not available or when you want fine-grained IAM policy control. You can also attach a KMS key for encrypting notebook storage.
+
+    ```hcl
+    module "emr_studio_iam" {
+      source = "terraform-aws-modules/emr/aws//modules/studio"
+
+      name                = "example-iam"
+      auth_mode           = "IAM"
+      default_s3_location = "s3://${module.s3_bucket.s3_bucket_id}/example"
+
+      vpc_id     = module.vpc.vpc_id
+      subnet_ids = module.vpc.private_subnets
+
+      encryption_key_arn = module.kms.key_arn
+
+      service_role_statements = {
+        "AllowKMS" = {
+          effect = "Allow"
+          actions = [
+            "kms:Decrypt",
+            "kms:GenerateDataKey",
+            "kms:ReEncryptFrom",
+            "kms:ReEncryptTo",
+            "kms:DescribeKey"
+          ]
+          resources = [module.kms.key_arn]
+        }
+      }
+
+      tags = local.tags
+    }
+    ```
+
+    The KMS key must grant the studio's service role permission to use it. The full example at `examples/studio/main.tf` shows how to create the key with the correct key policy:
+
+    ```hcl
+    module "kms" {
+      source  = "terraform-aws-modules/kms/aws"
+      version = "~> 4.0"
+
+      deletion_window_in_days = 7
+      description             = "KMS key for EMR Studio."
+      enable_key_rotation     = true
+      is_enabled              = true
+      key_usage               = "ENCRYPT_DECRYPT"
+      enable_default_policy   = true
+
+      key_statements = [
+        {
+          sid = "EMRStudio"
+          actions = [
+            "kms:Decrypt",
+            "kms:GenerateDataKey",
+            "kms:ReEncryptFrom",
+            "kms:ReEncryptTo",
+            "kms:DescribeKey"
+          ]
+          resources = ["*"]
+
+          principals = [
+            {
+              type        = "AWS"
+              identifiers = [module.emr_studio_iam.service_iam_role_arn]
+            }
+          ]
+
+          conditions = [
+            {
+              test     = "StringEquals"
+              variable = "kms:CallerAccount"
+              values   = [data.aws_caller_identity.current.account_id]
+            },
+            {
+              test     = "StringEquals"
+              variable = "kms:EncryptionContext:aws:s3:arn"
+              values   = [module.s3_bucket.s3_bucket_arn]
+            },
+            {
+              test     = "StringEquals"
+              variable = "kms:ViaService"
+              values   = ["s3.${local.region}.amazonaws.com"]
+            }
+          ]
+        }
+      ]
+
+      aliases = [local.name]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Workspace storage
+
+The `default_s3_location` sets the default S3 path where EMR Studio stores workspace files and notebook outputs. Provide a path that includes a prefix, for example `"s3://my-bucket/studio-workspaces"`.
+
+The S3 bucket should block public access and use server-side encryption. The full example creates a suitable bucket:
+
+```hcl
+module "s3_bucket" {
+  source  = "terraform-aws-modules/s3-bucket/aws"
+  version = "~> 5.0"
+
+  bucket_prefix = "${local.name}-"
+  force_destroy = true
+
+  attach_deny_insecure_transport_policy = true
+  attach_require_latest_tls_policy      = true
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+
+  server_side_encryption_configuration = {
+    rule = {
+      apply_server_side_encryption_by_default = {
+        sse_algorithm = "AES256"
+      }
+    }
+  }
+}
+```
+
+## Session mappings
+
+Session mappings control which IAM Identity Center users or groups can access the studio and what permissions they have. Each mapping entry specifies an `identity_type` (`USER` or `GROUP`) and the corresponding `identity_id` from the IAM Identity Center identity store:
+
+```hcl
+session_mappings = {
+  admin_group = {
+    identity_type = "GROUP"
+    identity_id   = data.aws_identitystore_group.this.group_id
+  }
+  # Add additional user or group mappings as needed
+}
+```
+
+<Note>
+Session mappings are only applicable when `auth_mode = "SSO"`. They are ignored for IAM authentication mode.
+</Note>
